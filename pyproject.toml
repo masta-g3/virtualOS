@@ -1,0 +1,9 @@
+[project]
+name = "pydantic-agents"
+version = "0.1.0"
+description = "PydanticAI agent experiments"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic-ai>=1.0.0",
+]
