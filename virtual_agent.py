@@ -2,7 +2,7 @@ import asyncio
 from dataclasses import dataclass, field
 
 from dotenv import load_dotenv
-from pydantic_ai import Agent, RunContext
+from pydantic_ai import Agent, RunContext, UsageLimits
 
 load_dotenv()
 
@@ -57,7 +57,7 @@ class AgentDeps:
 
 
 agent = Agent(
-    "openai:gpt-4.1-mini",
+    "openai-responses:gpt-5.1-codex-mini",
     deps_type=AgentDeps,
     system_prompt=(
         "You are a coding assistant in a Virtual Terminal. "
@@ -125,7 +125,7 @@ async def main():
     prompt = "Create a python script that calculates factorial, save it as math_tools.py, then cat it to verify."
     print(f"User: {prompt}")
 
-    result = await agent.run(prompt, deps=deps)
+    result = await agent.run(prompt, deps=deps, usage_limits=UsageLimits(request_limit=None))
 
     print("\n--- Agent Response ---")
     print(result.output)
