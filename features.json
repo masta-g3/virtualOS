@@ -2,7 +2,11 @@
   {
     "id": "agent-001",
     "description": "VirtualFileSystem with in-memory dict-based storage",
-    "steps": ["Create file with write()", "Read file with read()", "List files with list_dir()"],
+    "steps": [
+      "Create file with write()",
+      "Read file with read()",
+      "List files with list_dir()"
+    ],
     "status": "done",
     "priority": 1,
     "depends_on": [],
@@ -13,10 +17,18 @@
   {
     "id": "agent-002",
     "description": "run_shell tool with ls, cat, echo, rm, pwd, cd commands",
-    "steps": ["Run ls to list files", "Run cat to read file", "Run echo > to write file", "Run rm to delete", "Run pwd/cd for navigation"],
+    "steps": [
+      "Run ls to list files",
+      "Run cat to read file",
+      "Run echo > to write file",
+      "Run rm to delete",
+      "Run pwd/cd for navigation"
+    ],
     "status": "done",
     "priority": 1,
-    "depends_on": ["agent-001"],
+    "depends_on": [
+      "agent-001"
+    ],
     "discovered_from": null,
     "spec_file": null,
     "created_at": "2025-12-08"
@@ -24,10 +36,16 @@
   {
     "id": "agent-003",
     "description": "Add mkdir, touch, mv commands to run_shell",
-    "steps": ["Run mkdir to create directory", "Run touch to create empty file", "Run mv to rename/move file"],
+    "steps": [
+      "Run mkdir to create directory",
+      "Run touch to create empty file",
+      "Run mv to rename/move file"
+    ],
     "status": "pending",
     "priority": 2,
-    "depends_on": ["agent-002"],
+    "depends_on": [
+      "agent-002"
+    ],
     "discovered_from": null,
     "spec_file": null,
     "created_at": "2025-12-08"
@@ -35,10 +53,15 @@
   {
     "id": "agent-004",
     "description": "Add grep-like file content search to run_shell",
-    "steps": ["Run grep pattern to search file contents", "Results show matching lines with context"],
+    "steps": [
+      "Run grep pattern to search file contents",
+      "Results show matching lines with context"
+    ],
     "status": "pending",
     "priority": 2,
-    "depends_on": ["agent-002"],
+    "depends_on": [
+      "agent-002"
+    ],
     "discovered_from": null,
     "spec_file": null,
     "created_at": "2025-12-08"
@@ -46,10 +69,15 @@
   {
     "id": "agent-005",
     "description": "Support multi-file operations (wildcards or batch)",
-    "steps": ["Run command with glob pattern", "Operation applies to multiple files"],
+    "steps": [
+      "Run command with glob pattern",
+      "Operation applies to multiple files"
+    ],
     "status": "pending",
     "priority": 3,
-    "depends_on": ["agent-003"],
+    "depends_on": [
+      "agent-003"
+    ],
     "discovered_from": null,
     "spec_file": null,
     "created_at": "2025-12-08"
@@ -57,7 +85,11 @@
   {
     "id": "tui-001",
     "description": "Basic TUI with input prompt and conversation loop",
-    "steps": ["Type message and press enter", "See agent response", "Type another message"],
+    "steps": [
+      "Type message and press enter",
+      "See agent response",
+      "Type another message"
+    ],
     "status": "done",
     "priority": 1,
     "depends_on": [],
@@ -68,10 +100,15 @@
   {
     "id": "tui-002",
     "description": "Display tool calls inline with styling",
-    "steps": ["Agent calls run_shell", "Tool call appears in blue italic before response"],
+    "steps": [
+      "Agent calls run_shell",
+      "Tool call appears in blue italic before response"
+    ],
     "status": "done",
     "priority": 1,
-    "depends_on": ["tui-001"],
+    "depends_on": [
+      "tui-001"
+    ],
     "discovered_from": null,
     "spec_file": "docs/history/20251208_tui_interface.md",
     "created_at": "2025-12-08"
@@ -79,10 +116,15 @@
   {
     "id": "tui-003",
     "description": "Markdown rendering and message history",
-    "steps": ["Agent response renders as markdown", "Follow-up questions have context from previous turns"],
+    "steps": [
+      "Agent response renders as markdown",
+      "Follow-up questions have context from previous turns"
+    ],
     "status": "done",
     "priority": 1,
-    "depends_on": ["tui-001"],
+    "depends_on": [
+      "tui-001"
+    ],
     "discovered_from": null,
     "spec_file": "docs/history/20251208_tui_interface.md",
     "created_at": "2025-12-08"
@@ -90,10 +132,15 @@
   {
     "id": "tui-004",
     "description": "Clear messages and error display",
-    "steps": ["Press ctrl+l to clear all messages", "Network/API errors display in red"],
+    "steps": [
+      "Press ctrl+l to clear all messages",
+      "Network/API errors display in red"
+    ],
     "status": "done",
     "priority": 2,
-    "depends_on": ["tui-001"],
+    "depends_on": [
+      "tui-001"
+    ],
     "discovered_from": null,
     "spec_file": "docs/history/20251208_tui_interface.md",
     "created_at": "2025-12-08"
@@ -101,10 +148,16 @@
   {
     "id": "tui-005",
     "description": "Loading indicator during agent work",
-    "steps": ["Submit message", "See spinner/indicator while agent processes", "Indicator disappears when response arrives"],
+    "steps": [
+      "Submit message",
+      "See spinner/indicator while agent processes",
+      "Indicator disappears when response arrives"
+    ],
     "status": "pending",
     "priority": 2,
-    "depends_on": ["tui-001"],
+    "depends_on": [
+      "tui-001"
+    ],
     "discovered_from": null,
     "spec_file": null,
     "created_at": "2025-12-08"
@@ -112,10 +165,15 @@
   {
     "id": "tui-006",
     "description": "Syntax highlighting in code blocks",
-    "steps": ["Agent returns code in markdown fence", "Code displays with syntax colors"],
+    "steps": [
+      "Agent returns code in markdown fence",
+      "Code displays with syntax colors"
+    ],
     "status": "pending",
     "priority": 3,
-    "depends_on": ["tui-003"],
+    "depends_on": [
+      "tui-003"
+    ],
     "discovered_from": null,
     "spec_file": null,
     "created_at": "2025-12-08"
@@ -123,10 +181,16 @@
   {
     "id": "tui-007",
     "description": "Session persistence (save/restore history)",
-    "steps": ["Exit TUI", "Restart TUI", "Previous conversation history is restored"],
+    "steps": [
+      "Exit TUI",
+      "Restart TUI",
+      "Previous conversation history is restored"
+    ],
     "status": "pending",
     "priority": 3,
-    "depends_on": ["tui-003"],
+    "depends_on": [
+      "tui-003"
+    ],
     "discovered_from": null,
     "spec_file": null,
     "created_at": "2025-12-08"
@@ -134,10 +198,32 @@
   {
     "id": "tui-008",
     "description": "Scrollable/collapsible tool call output",
-    "steps": ["Agent makes tool call with long output", "Output is collapsed or scrollable, not flooding the view"],
+    "steps": [
+      "Agent makes tool call with long output",
+      "Output is collapsed or scrollable, not flooding the view"
+    ],
     "status": "pending",
     "priority": 3,
-    "depends_on": ["tui-002"],
+    "depends_on": [
+      "tui-002"
+    ],
+    "discovered_from": null,
+    "spec_file": null,
+    "created_at": "2025-12-08"
+  },
+  {
+    "id": "agent-006",
+    "description": "Load files from a host folder into VirtualFileSystem on startup",
+    "steps": [
+      "Place files in designated folder",
+      "Start TUI",
+      "Files appear in virtual filesystem"
+    ],
+    "status": "pending",
+    "priority": 2,
+    "depends_on": [
+      "agent-001"
+    ],
     "discovered_from": null,
     "spec_file": null,
     "created_at": "2025-12-08"

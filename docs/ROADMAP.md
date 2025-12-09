@@ -22,6 +22,7 @@ Track what's planned, what's done, and what's explicitly out of scope.
 Ideas under consideration. Must justify value before implementing.
 
 ### Agent
+- [ ] Load files from host folder into VirtualFileSystem on startup
 - [ ] mkdir, touch, mv commands
 - [ ] File content search (grep-like)
 - [ ] Multi-file operations
