@@ -1,0 +1,54 @@
+/* === Base === */
+Screen {
+    background: #0d0d0d;
+}
+
+/* === Header === */
+#header {
+    dock: top;
+    height: 1;
+    background: #1a1a1a;
+    color: #22c55e;
+    text-style: bold;
+    padding: 0 1;
+}
+
+/* === Messages Area === */
+#messages {
+    padding: 1;
+    scrollbar-size: 1 1;
+}
+
+.user-message {
+    color: #e0e0e0;
+    margin: 0 0 1 0;
+}
+
+.agent-message {
+    color: #a0a0a0;
+    margin: 0 0 1 0;
+    padding: 0;
+}
+
+.tool-call {
+    color: #3b82f6;
+    text-style: italic;
+    margin: 0 0 0 2;
+}
+
+.error-message {
+    color: #ef4444;
+}
+
+/* === Input === */
+#prompt {
+    dock: bottom;
+    height: 3;
+    background: #1a1a1a;
+    border: tall #333333;
+    padding: 0 1;
+}
+
+#prompt:focus {
+    border: tall #22c55e;
+}

@@ -6,11 +6,14 @@ PydanticAI agent experiments - sandboxed AI agents with tool use.
 
 ```
 pydantic-agents/
-├── virtual_agent.py    # Main agent script
+├── virtual_agent.py    # Agent library (VirtualFileSystem, AgentDeps, agent)
+├── tui.py              # Textual TUI (imports from virtual_agent)
+├── tui.tcss            # TUI styles
 ├── pyproject.toml      # Dependencies (uv)
 ├── .env                # API keys (not committed)
 └── docs/
-    └── STRUCTURE.md    # This file
+    ├── STRUCTURE.md    # This file
+    └── history/        # Archived feature specs
 ```
 
 ## Core Concepts
@@ -72,11 +75,16 @@ def my_tool(ctx: RunContext[MyDeps], arg: str) -> str:
 ## Running
 
 ```bash
+# CLI mode
 uv run python virtual_agent.py
+
+# TUI mode (interactive terminal interface)
+uv run python tui.py
 ```
 
 ## Dependencies
 
 Managed via `uv`. Key packages:
 - `pydantic-ai` - Agent framework
+- `textual` - TUI framework
 - `python-dotenv` - Load `.env` files
