@@ -7,7 +7,7 @@ PydanticAI agent experiments - sandboxed AI agents with tool use.
 **Less is more.** This codebase prioritizes simplicity and clarity over features. Before adding anything, ask: is this essential?
 
 - `virtual_agent.py` is ~100 lines - one agent, one tool, one dataclass
-- `tui.py` is ~100 lines - thin view layer, imports agent, no duplication
+- `tui.py` is ~280 lines - view layer with visual polish (tree-style messages, animated status)
 - No abstractions until proven necessary
 - No configuration beyond what's needed
 - No defensive code in trusted paths

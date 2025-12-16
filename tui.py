@@ -6,13 +6,29 @@ from pydantic_ai import CallToolsNode, ModelMessagesTypeAdapter, ModelRequestNod
 from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, ToolCallPart, ToolReturnPart, UserPromptPart
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import VerticalScroll
+from textual.containers import Horizontal, VerticalScroll
 from textual.widgets import Input, Markdown, Static
 
 from virtual_agent import VirtualFileSystem, AgentDeps, agent
 
 WORKSPACE_PATH = Path("./workspace")
 HISTORY_FILE = WORKSPACE_PATH / ".chat_history.json"
+
+
+def format_tool_args(args) -> str:
+    """Extract clean command from tool args."""
+    # Handle dict
+    if isinstance(args, dict) and "command" in args:
+        return args["command"]
+    # Handle JSON string
+    if isinstance(args, str):
+        try:
+            parsed = json.loads(args)
+            if isinstance(parsed, dict) and "command" in parsed:
+                return parsed["command"]
+        except json.JSONDecodeError:
+            pass
+    return str(args)
 
 
 def load_chat_history(path: Path) -> tuple[str, dict]:
@@ -44,6 +60,9 @@ class VirtualAgentApp(App):
         self.fs = VirtualFileSystem()
         self.workspace_path = WORKSPACE_PATH
         self.modified = False
+        self.thinking = False
+        self._thinking_timer = None
+        self._thinking_frame = 0
 
         count = self.fs.load_from_disk(self.workspace_path)
         if count == 0:
@@ -65,9 +84,12 @@ class VirtualAgentApp(App):
         self.conversations = conversations
 
     def compose(self) -> ComposeResult:
-        yield Static("Virtual OS", id="header")
+        with Horizontal(id="header"):
+            yield Static("Virtual OS", id="header-title")
+            yield Static("", id="header-status")
         yield VerticalScroll(id="messages")
         yield Input(placeholder="Type a message...", id="prompt")
+        yield Static("ctrl+s save │ ctrl+l new │ ctrl+c quit", id="footer")
 
     async def on_mount(self) -> None:
         self.query_one("#prompt", Input).focus()
@@ -88,16 +110,19 @@ class VirtualAgentApp(App):
             if isinstance(msg, ModelRequest):
                 for part in msg.parts:
                     if isinstance(part, UserPromptPart):
-                        await container.mount(Static(f"> {part.content}", classes="user-message"))
+                        await container.mount(Static(f"[#e6a855]┃[/] {part.content}", classes="user-message"))
                     elif isinstance(part, ToolReturnPart):
-                        content = str(part.content).replace("\n", "\n      ")
-                        await container.mount(Static(f"    → {content}", classes="tool-result", markup=False))
+                        lines = str(part.content).split("\n")
+                        for i, line in enumerate(lines):
+                            prefix = "│ └─ " if i == 0 else "│    "
+                            await container.mount(Static(f"{prefix}{line}", classes="tool-result", markup=False))
             elif isinstance(msg, ModelResponse):
                 for part in msg.parts:
                     if isinstance(part, ToolCallPart):
-                        await container.mount(Static(f"  [{part.tool_name}] {part.args}", classes="tool-call", markup=False))
+                        await container.mount(Static(f"│ ⚡ {part.tool_name}: {format_tool_args(part.args)}", classes="tool-call", markup=False))
                     elif isinstance(part, TextPart):
-                        await container.mount(Markdown(part.content, classes="agent-message"))
+                        await container.mount(Markdown(f"╰ {part.content}", classes="agent-message"))
+                        await container.mount(Static("", classes="turn-separator"))
         container.scroll_end()
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
@@ -111,18 +136,21 @@ class VirtualAgentApp(App):
 
         messages = self.query_one("#messages", VerticalScroll)
 
-        user_msg = Static(f"> {prompt}", classes="user-message")
+        user_msg = Static(f"[#e6a855]┃[/] {prompt}", classes="user-message")
         await messages.mount(user_msg)
         messages.scroll_end()
 
         response = Markdown("", classes="agent-message")
         await messages.mount(response)
 
+        self._set_thinking(True)
         try:
             await self._run_agent(prompt, response, messages)
         except Exception as e:
             response.update(f"**Error:** {e}")
             response.add_class("error-message")
+        finally:
+            self._set_thinking(False)
 
         input_widget.disabled = False
         input_widget.focus()
@@ -145,7 +173,7 @@ class VirtualAgentApp(App):
                     for part in node.model_response.parts:
                         if isinstance(part, ToolCallPart):
                             tool_msg = Static(
-                                f"  [{part.tool_name}] {part.args}",
+                                f"│ ⚡ {part.tool_name}: {format_tool_args(part.args)}",
                                 classes="tool-call",
                                 markup=False,
                             )
@@ -154,16 +182,19 @@ class VirtualAgentApp(App):
                 elif isinstance(node, ModelRequestNode):
                     for part in node.request.parts:
                         if isinstance(part, ToolReturnPart):
-                            content = str(part.content).replace("\n", "\n      ")
-                            result_msg = Static(
-                                f"    → {content}",
-                                classes="tool-result",
-                                markup=False,
-                            )
-                            await container.mount(result_msg, before=response_widget)
+                            lines = str(part.content).split("\n")
+                            for i, line in enumerate(lines):
+                                prefix = "│ └─ " if i == 0 else "│    "
+                                result_msg = Static(
+                                    f"{prefix}{line}",
+                                    classes="tool-result",
+                                    markup=False,
+                                )
+                                await container.mount(result_msg, before=response_widget)
                             container.scroll_end()
 
-            response_widget.update(run.result.output)
+            response_widget.update(f"╰ {run.result.output}")
+            await container.mount(Static("", classes="turn-separator"))
             container.scroll_end()
             self.history = run.result.all_messages()
         self._check_modified()
@@ -183,13 +214,35 @@ class VirtualAgentApp(App):
         messages = self.query_one("#messages", VerticalScroll)
         await messages.remove_children()
 
-    def _update_header(self) -> None:
-        """Update header to show modified status."""
-        header = self.query_one("#header", Static)
-        if self.modified:
-            header.update("Virtual OS [modified]")
+    def _set_thinking(self, thinking: bool) -> None:
+        """Set thinking state and start/stop animation."""
+        self.thinking = thinking
+        if thinking:
+            self._thinking_frame = 0
+            self._thinking_timer = self.set_interval(0.15, self._animate_thinking)
         else:
-            header.update("Virtual OS")
+            if self._thinking_timer:
+                self._thinking_timer.stop()
+                self._thinking_timer = None
+            self._update_header()
+
+    def _animate_thinking(self) -> None:
+        """Cycle through thinking animation frames."""
+        frames = ["◐", "◓", "◑", "◒"]
+        status = self.query_one("#header-status", Static)
+        dot = frames[self._thinking_frame % len(frames)]
+        status.update(f"[#e6a855]{dot}[/] thinking...")
+        self._thinking_frame += 1
+
+    def _update_header(self) -> None:
+        """Update header status (right side)."""
+        status = self.query_one("#header-status", Static)
+        if self.thinking:
+            return  # Animation handles this
+        elif self.modified:
+            status.update("[modified]")
+        else:
+            status.update("")
 
     def _check_modified(self) -> None:
         """Check if filesystem differs from snapshot."""

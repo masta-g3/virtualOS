@@ -1,15 +1,35 @@
-/* === Base === */
+/* === Base - Warm dark theme === */
 Screen {
-    background: #0d0d0d;
+    background: #0a0a0b;
 }
 
 /* === Header === */
 #header {
     dock: top;
     height: 1;
-    background: #1a1a1a;
-    color: #22c55e;
+    background: #141416;
+    padding: 0 1;
+}
+
+#header-title {
+    color: #e6a855;
     text-style: bold;
+    width: auto;
+}
+
+#header-status {
+    color: #e6a855;
+    text-align: right;
+    width: 1fr;
+}
+
+/* === Footer (keybindings) === */
+#footer {
+    dock: bottom;
+    height: 1;
+    background: #0a0a0b;
+    color: #5c5a56;
+    text-align: center;
     padding: 0 1;
 }
 
@@ -17,36 +37,42 @@ Screen {
 #messages {
     padding: 1;
     scrollbar-size: 1 1;
+    scrollbar-background: #141416;
+    scrollbar-color: #3a3a3d;
 }
 
 .user-message {
-    color: #e0e0e0;
+    color: #e8e6e3;
     margin: 0 0 1 0;
 }
 
 .agent-message {
-    color: #a0a0a0;
+    color: #9a9894;
     margin: 0 0 1 0;
     padding: 0;
 }
 
 .tool-call {
-    color: #3b82f6;
-    text-style: italic;
-    margin: 0 0 0 2;
+    color: #7aa2f7;
+    margin: 0;
 }
 
 .tool-result {
-    color: #666666;
-    margin: 0 0 0 2;
+    color: #6b7280;
+    margin: 0;
+}
+
+.turn-separator {
+    height: 1;
+    margin: 0 0 1 0;
 }
 
 .error-message {
-    color: #ef4444;
+    color: #e85c5c;
 }
 
 .system-message {
-    color: #22c55e;
+    color: #5ce888;
     text-style: italic;
     margin: 0 0 1 0;
 }
@@ -55,11 +81,11 @@ Screen {
 #prompt {
     dock: bottom;
     height: 3;
-    background: #1a1a1a;
-    border: tall #333333;
+    background: #141416;
+    border: tall #3a3a3d;
     padding: 0 1;
 }
 
 #prompt:focus {
-    border: tall #22c55e;
+    border: tall #e6a855;
 }
