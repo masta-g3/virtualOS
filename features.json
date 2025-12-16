@@ -213,19 +213,60 @@
   },
   {
     "id": "agent-006",
-    "description": "Load files from a host folder into VirtualFileSystem on startup",
+    "description": "Bidirectional workspace sync between host folder and VirtualFileSystem",
     "steps": [
       "Place files in designated folder",
       "Start TUI",
       "Files appear in virtual filesystem"
     ],
-    "status": "pending",
+    "status": "done",
     "priority": 2,
     "depends_on": [
       "agent-001"
     ],
     "discovered_from": null,
+    "spec_file": "docs/history/20251208_workspace_sync.md",
+    "created_at": "2025-12-08"
+  },
+  {
+    "id": "agent-007",
+    "description": "Execute Python files in workspace via run_shell",
+    "steps": [
+      "Agent writes python file",
+      "Agent runs python file.py",
+      "Output shown in TUI"
+    ],
+    "status": "done",
+    "priority": 2,
+    "depends_on": [
+      "agent-006"
+    ],
+    "discovered_from": null,
     "spec_file": null,
     "created_at": "2025-12-08"
+  },
+  {
+    "id": "tui-001",
+    "epic": "tui",
+    "feature": "Slash commands system",
+    "status": "planning",
+    "created_at": "2025-12-16"
+  },
+  {
+    "id": "tui-009",
+    "description": "UX assessment and design improvements for TUI",
+    "steps": [
+      "Evaluate against Nielsen heuristics",
+      "Identify design gaps and quick wins",
+      "Propose refined color palette",
+      "Add loading indicator",
+      "Add keybinding footer"
+    ],
+    "status": "pending",
+    "priority": 2,
+    "depends_on": [],
+    "discovered_from": null,
+    "spec_file": "docs/tui-009.md",
+    "created_at": "2025-12-16"
   }
 ]

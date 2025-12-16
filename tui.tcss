@@ -36,8 +36,19 @@ Screen {
     margin: 0 0 0 2;
 }
 
+.tool-result {
+    color: #666666;
+    margin: 0 0 0 2;
+}
+
 .error-message {
     color: #ef4444;
+}
+
+.system-message {
+    color: #22c55e;
+    text-style: italic;
+    margin: 0 0 1 0;
 }
 
 /* === Input === */

@@ -8,6 +8,8 @@ Track what's planned, what's done, and what's explicitly out of scope.
 - [x] VirtualFileSystem - in-memory dict-based filesystem
 - [x] run_shell tool - ls, cat, echo, rm, pwd, cd
 - [x] AgentDeps for dependency injection
+- [x] Workspace sync - load from `./workspace/`, save with ctrl+s
+- [x] Python execution - `python script.py` runs in workspace
 
 ### TUI (`tui.py`)
 - [x] Input prompt with conversation loop
@@ -16,13 +18,13 @@ Track what's planned, what's done, and what's explicitly out of scope.
 - [x] Message history across turns
 - [x] Clear messages (ctrl+l)
 - [x] Error display (red)
+- [x] Modified indicator in header
 
 ## Wishlist
 
 Ideas under consideration. Must justify value before implementing.
 
 ### Agent
-- [ ] Load files from host folder into VirtualFileSystem on startup
 - [ ] mkdir, touch, mv commands
 - [ ] File content search (grep-like)
 - [ ] Multi-file operations

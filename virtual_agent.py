@@ -1,8 +1,11 @@
 import asyncio
+import subprocess
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from dotenv import load_dotenv
 from pydantic_ai import Agent, RunContext, UsageLimits
+from pydantic_ai.models.openai import OpenAIResponsesModelSettings
 
 load_dotenv()
 
@@ -16,8 +19,18 @@ class VirtualFileSystem:
 
     def _resolve(self, path: str) -> str:
         if path.startswith("/"):
-            return path
-        return f"{self.cwd.rstrip('/')}/{path}"
+            resolved = path
+        else:
+            resolved = f"{self.cwd.rstrip('/')}/{path}"
+        # Normalize . and ..
+        parts = []
+        for part in resolved.split("/"):
+            if part == "..":
+                if parts:
+                    parts.pop()
+            elif part and part != ".":
+                parts.append(part)
+        return "/" + "/".join(parts)
 
     def write(self, path: str, content: str) -> str:
         full_path = self._resolve(path)
@@ -49,11 +62,43 @@ class VirtualFileSystem:
             return f"Deleted {full_path}"
         return f"Error: File {full_path} not found"
 
+    def load_from_disk(self, host_path: Path, virtual_root: str = "/home/user") -> int:
+        """Load files from host folder into virtual filesystem. Returns count."""
+        count = 0
+        if not host_path.exists():
+            return count
+        for file in host_path.rglob("*"):
+            if file.is_file():
+                try:
+                    content = file.read_text()
+                    relative = file.relative_to(host_path)
+                    virtual_path = f"{virtual_root}/{relative}"
+                    self.files[virtual_path] = content
+                    count += 1
+                except (UnicodeDecodeError, PermissionError):
+                    pass
+        return count
+
+    def save_to_disk(self, host_path: Path, virtual_root: str = "/home/user") -> int:
+        """Save virtual files back to host folder. Returns count."""
+        count = 0
+        host_path.mkdir(parents=True, exist_ok=True)
+        for virtual_path, content in self.files.items():
+            if virtual_path.startswith(virtual_root):
+                relative = virtual_path[len(virtual_root):].lstrip("/")
+                if relative:
+                    target = host_path / relative
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_text(content)
+                    count += 1
+        return count
+
 
 @dataclass
 class AgentDeps:
     fs: VirtualFileSystem
     user_name: str
+    workspace_path: Path | None = None
 
 
 agent = Agent(
@@ -62,8 +107,13 @@ agent = Agent(
     system_prompt=(
         "You are a coding assistant in a Virtual Terminal. "
         "You can manipulate files and run simulated bash commands in your virtual filesystem. "
-        "When asked to write code, save it to a file first. "
-        "Use the 'run_shell' tool for file operations."
+        "Available commands: ls, cat (read only), echo (with > to write files), rm, pwd, cd, python. "
+        "No heredoc syntax - use echo with \\n for multiline content. "
+        "When asked to write code, save it to a file first."
+    ),
+    model_settings=OpenAIResponsesModelSettings(
+        openai_reasoning_effort="high",
+        openai_reasoning_summary="detailed",
     ),
 )
 
@@ -72,13 +122,14 @@ agent = Agent(
 def run_shell(ctx: RunContext[AgentDeps], command: str) -> str:
     """
     Execute a simulated shell command.
-    Supported: ls, cat, echo, rm, pwd, cd.
+    Supported: ls, cat, echo, rm, pwd, cd, python.
 
     Examples:
     - ls
     - cat myfile.py
     - echo "print('hello')" > hello.py
     - rm oldfile.txt
+    - python script.py
     """
     fs = ctx.deps.fs
     parts = command.split(" ", 1)
@@ -108,9 +159,31 @@ def run_shell(ctx: RunContext[AgentDeps], command: str) -> str:
         if ">" in arg:
             content_part, file_part = arg.rsplit(">", 1)
             content = content_part.strip().strip('"').strip("'")
+            content = content.replace("\\n", "\n").replace("\\t", "\t")
             filename = file_part.strip()
             return fs.write(filename, content)
         return arg
+
+    if cmd == "python":
+        workspace = ctx.deps.workspace_path
+        if not workspace:
+            return "Error: No workspace configured for Python execution."
+        fs.save_to_disk(workspace)
+        script_path = arg
+        if script_path.startswith("/home/user/"):
+            script_path = script_path[len("/home/user/"):]
+        try:
+            result = subprocess.run(
+                ["python", script_path],
+                cwd=workspace,
+                capture_output=True,
+                timeout=30,
+                text=True,
+            )
+            output = result.stdout + result.stderr
+            return output.strip() if output.strip() else "(no output)"
+        except subprocess.TimeoutExpired:
+            return "Error: Execution timed out (30s limit)."
 
     return f"Error: Command '{cmd}' not implemented in virtual sandbox."
 

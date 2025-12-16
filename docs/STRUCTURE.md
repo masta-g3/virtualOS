@@ -19,6 +19,7 @@ pydantic-agents/
 ├── virtual_agent.py    # Agent library (VirtualFileSystem, AgentDeps, agent)
 ├── tui.py              # Textual TUI (imports from virtual_agent)
 ├── tui.tcss            # TUI styles
+├── workspace/          # Synced with VirtualFileSystem (ctrl+s to save)
 ├── pyproject.toml      # Dependencies (uv)
 ├── .env                # API keys (not committed)
 └── docs/
@@ -91,6 +92,14 @@ uv run python virtual_agent.py
 # TUI mode (interactive terminal interface)
 uv run python tui.py
 ```
+
+## Workspace Sync
+
+The TUI loads files from `./workspace/` into the virtual filesystem on startup:
+- Files appear at `/home/user/*` in the VFS
+- Agent can read/modify these files
+- Press `ctrl+s` to save changes back to `./workspace/`
+- Header shows `[modified]` when unsaved changes exist
 
 ## Dependencies
 
