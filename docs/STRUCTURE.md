@@ -41,24 +41,34 @@ A PydanticAI agent operating in a sandboxed environment:
 │  (LLM with system prompt + tool access)     │
 └─────────────────┬───────────────────────────┘
                   │ calls
-                  ▼
-┌─────────────────────────────────────────────┐
-│              run_shell tool                 │
-│  (ls, cat, echo, rm, pwd, cd)               │
-└─────────────────┬───────────────────────────┘
-                  │ manipulates
-                  ▼
+        ┌─────────┼─────────┐
+        ▼         ▼         ▼
+┌────────────┐ ┌────────┐ ┌──────────┐
+│ write_file │ │read_file│ │run_shell │
+│ (create)   │ │ (read) │ │(ls,rm,cd,│
+└─────┬──────┘ └───┬────┘ │pwd,python)│
+      │            │      └─────┬────┘
+      └────────────┼────────────┘
+                   ▼
 ┌─────────────────────────────────────────────┐
 │          VirtualFileSystem                  │
 │  (in-memory dict, no real disk access)      │
 └─────────────────────────────────────────────┘
 ```
 
+**Tools:**
+
+| Tool | Purpose | Parameters |
+|------|---------|------------|
+| `write_file` | Create/overwrite files | `path`, `content` |
+| `read_file` | Read file contents | `path` |
+| `run_shell` | Shell commands | `command` (ls, rm, pwd, cd, python) |
+
 **Key components:**
 
 - `VirtualFileSystem` - Dataclass holding `files: dict[str, str]` and `cwd: str`
 - `AgentDeps` - Dependency injection container passed to tools via `RunContext`
-- `run_shell` - Tool decorated with `@agent.tool`, parses shell-like commands
+- Structured tools for file ops (no shell parsing issues)
 
 **Safety:** All file operations happen in a Python dictionary. The agent cannot access the real filesystem.
 

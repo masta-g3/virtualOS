@@ -107,12 +107,12 @@ agent = Agent(
     "openai-responses:gpt-5.1-codex-mini",
     deps_type=AgentDeps,
     system_prompt=(
-        "You are a coding assistant in a Virtual Terminal. "
-        "You can manipulate files and run simulated bash commands in your virtual filesystem. "
-        "Available commands: ls, cat, echo, rm, pwd, cd, python. "
-        "Echo syntax: echo \"content\" > file.txt (no -e or -n flags). "
-        "For multiline content, use \\n: echo \"line1\\nline2\" > file.txt "
-        "When asked to write code, save it to a file first, then run with: python filename.py"
+        "You are a coding assistant in a sandboxed Virtual Terminal.\n"
+        "Available tools:\n"
+        "- write_file(path, content): Create or overwrite a file\n"
+        "- read_file(path): Read file contents\n"
+        "- run_shell(command): Shell commands (ls, rm, pwd, cd, python)\n\n"
+        "Workflow: write_file to create scripts, run_shell('python script.py') to execute."
     ),
     model_settings=OpenAIResponsesModelSettings(
         openai_reasoning_effort="high",
@@ -122,17 +122,33 @@ agent = Agent(
 
 
 @agent.tool
+def write_file(ctx: RunContext[AgentDeps], path: str, content: str) -> str:
+    """
+    Write content to a file (creates or overwrites).
+
+    Args:
+        path: File path (relative to cwd or absolute)
+        content: Complete file content
+    """
+    return ctx.deps.fs.write(path, content)
+
+
+@agent.tool
+def read_file(ctx: RunContext[AgentDeps], path: str) -> str:
+    """
+    Read contents of a file.
+
+    Args:
+        path: File path (relative to cwd or absolute)
+    """
+    return ctx.deps.fs.read(path)
+
+
+@agent.tool
 def run_shell(ctx: RunContext[AgentDeps], command: str) -> str:
     """
-    Execute a simulated shell command.
-    Supported: ls, cat, echo, rm, pwd, cd, python.
-
-    Examples:
-    - ls
-    - cat myfile.py
-    - echo "print('hello')" > hello.py
-    - rm oldfile.txt
-    - python script.py
+    Execute a shell command. Use write_file/read_file for file operations.
+    Supported: ls, rm, pwd, cd, python.
     """
     fs = ctx.deps.fs
     parts = command.split(" ", 1)
@@ -149,26 +165,8 @@ def run_shell(ctx: RunContext[AgentDeps], command: str) -> str:
         fs.cwd = fs._resolve(arg or ".")
         return f"Changed directory to {fs.cwd}"
 
-    if cmd == "cat":
-        return fs.read(arg)
-
     if cmd == "rm":
         return fs.delete(arg)
-
-    if cmd == "echo":
-        # Skip flags like -e, -n (agent sometimes uses them despite instructions)
-        while arg.startswith("-") and " " in arg:
-            _, arg = arg.split(" ", 1)
-        if ">" in arg:
-            content_part, file_part = arg.rsplit(">", 1)
-            content = content_part.strip()
-            # Strip one matching pair of outer quotes only (preserve internal quotes like ''')
-            if len(content) >= 2 and content[0] == content[-1] and content[0] in "\"'":
-                content = content[1:-1]
-            content = content.replace("\\n", "\n").replace("\\t", "\t")
-            filename = file_part.strip()
-            return fs.write(filename, content)
-        return arg
 
     if cmd == "python":
         workspace = ctx.deps.workspace_path
