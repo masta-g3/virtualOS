@@ -20,7 +20,9 @@ pydantic-agents/
 ├── tui.py              # Textual TUI (imports from virtual_agent)
 ├── tui.tcss            # TUI styles
 ├── commands.py         # Slash command registry and handlers
+├── research_tools.py   # LLMpedia DB queries (search, summaries, download)
 ├── workspace/          # Synced with VirtualFileSystem (ctrl+s to save)
+│   └── papers/         # Downloaded arXiv paper markdowns
 ├── pyproject.toml      # Dependencies (uv)
 ├── .env                # API keys (not committed)
 └── docs/
@@ -119,3 +121,6 @@ Managed via `uv`. Key packages:
 - `pydantic-ai` - Agent framework
 - `textual` - TUI framework
 - `python-dotenv` - Load `.env` files
+- `psycopg2-binary` - PostgreSQL client (research_tools)
+- `google-genai` - Gemini embeddings for semantic search
+- `requests` - HTTP client for S3 downloads
