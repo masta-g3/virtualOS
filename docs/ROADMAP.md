@@ -19,6 +19,7 @@ Track what's planned, what's done, and what's explicitly out of scope.
 - [x] Clear messages (ctrl+l)
 - [x] Error display (red)
 - [x] Modified indicator in header
+- [x] Slash commands (`/help`, `/clear`, `/sync`, `/model`, `/files`, `/quit`)
 
 ## Wishlist
 

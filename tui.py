@@ -9,6 +9,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, VerticalScroll
 from textual.widgets import Input, Markdown, Static
 
+from commands import dispatch
 from virtual_agent import VirtualFileSystem, AgentDeps, agent
 
 WORKSPACE_PATH = Path("./workspace")
@@ -89,7 +90,7 @@ class VirtualAgentApp(App):
             yield Static("", id="header-status")
         yield VerticalScroll(id="messages")
         yield Input(placeholder="Type a message...", id="prompt")
-        yield Static("ctrl+s save │ ctrl+l new │ ctrl+c quit", id="footer")
+        yield Static("ctrl+s sync │ ctrl+l clear │ ctrl+c quit", id="footer")
 
     async def on_mount(self) -> None:
         self.query_one("#prompt", Input).focus()
@@ -132,9 +133,18 @@ class VirtualAgentApp(App):
 
         input_widget = self.query_one("#prompt", Input)
         input_widget.value = ""
-        input_widget.disabled = True
 
         messages = self.query_one("#messages", VerticalScroll)
+
+        if prompt.startswith("/"):
+            result = await dispatch(self, prompt)
+            if result:
+                await messages.mount(Markdown(result, classes="agent-message"))
+                messages.scroll_end()
+            input_widget.focus()
+            return
+
+        input_widget.disabled = True
 
         user_msg = Static(f"[#e6a855]┃[/] {prompt}", classes="user-message")
         await messages.mount(user_msg)
