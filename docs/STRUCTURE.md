@@ -23,8 +23,9 @@ pydantic-agents/
 ├── pyproject.toml      # Dependencies (uv)
 ├── .env                # API keys (not committed)
 └── docs/
-    ├── STRUCTURE.md    # This file
-    └── history/        # Archived feature specs
+    ├── STRUCTURE.md       # This file
+    ├── VISUAL_IDENTITY.md # TUI design system (colors, prefixes, motion)
+    └── history/           # Archived feature specs
 ```
 
 ## Core Concepts
