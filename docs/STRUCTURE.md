@@ -19,6 +19,7 @@ pydantic-agents/
 ├── virtual_agent.py    # Agent library (VirtualFileSystem, AgentDeps, agent)
 ├── tui.py              # Textual TUI (imports from virtual_agent)
 ├── tui.tcss            # TUI styles
+├── commands.py         # Slash command registry and handlers
 ├── workspace/          # Synced with VirtualFileSystem (ctrl+s to save)
 ├── pyproject.toml      # Dependencies (uv)
 ├── .env                # API keys (not committed)
