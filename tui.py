@@ -10,7 +10,7 @@ from textual.containers import Horizontal, VerticalScroll
 from textual.widgets import Input, Markdown, Static
 
 from commands import dispatch
-from virtual_agent import VirtualFileSystem, AgentDeps, agent
+from virtual_agent import VirtualFileSystem, AgentDeps, agent, VIRTUAL_ROOT
 
 WORKSPACE_PATH = Path("./workspace")
 HISTORY_FILE = WORKSPACE_PATH / ".chat_history.json"
@@ -46,6 +46,20 @@ def save_chat_history(path: Path, current_id: str, conversations: dict) -> None:
     path.write_text(json.dumps({"current": current_id, "conversations": conversations}))
 
 
+def format_tool_result(content: str) -> list[Static]:
+    """Format tool result content into prefixed Static widgets."""
+    lines = str(content).split("\n")
+    return [
+        Static(f"{'│ └─ ' if i == 0 else '│    '}{line}", classes="tool-result", markup=False)
+        for i, line in enumerate(lines)
+    ]
+
+
+def format_tool_call(part: ToolCallPart) -> Static:
+    """Format a tool call into a Static widget."""
+    return Static(f"│ ⚡ {part.tool_name}: {format_tool_args(part.args)}", classes="tool-call", markup=False)
+
+
 class VirtualAgentApp(App):
     """Minimal TUI for the virtual agent."""
 
@@ -67,7 +81,7 @@ class VirtualAgentApp(App):
 
         count = self.fs.load_from_disk(self.workspace_path)
         if count == 0:
-            self.fs.files["/home/user/readme.txt"] = "Welcome to Virtual OS."
+            self.fs.files[f"{VIRTUAL_ROOT}/readme.txt"] = "Welcome to Virtual OS."
 
         self._snapshot = dict(self.fs.files)
         self.deps = AgentDeps(fs=self.fs, user_name="user", workspace_path=self.workspace_path)
@@ -98,11 +112,16 @@ class VirtualAgentApp(App):
             await self._render_history()
 
     def on_unmount(self) -> None:
-        if self.history:
-            self.conversations[self.conversation_id] = {
-                "messages": ModelMessagesTypeAdapter.dump_python(self.history, mode="json")
-            }
-            save_chat_history(HISTORY_FILE, self.conversation_id, self.conversations)
+        self._persist_conversation()
+
+    def _persist_conversation(self) -> None:
+        """Save current conversation to history dict and disk."""
+        if not self.history:
+            return
+        self.conversations[self.conversation_id] = {
+            "messages": ModelMessagesTypeAdapter.dump_python(self.history, mode="json")
+        }
+        save_chat_history(HISTORY_FILE, self.conversation_id, self.conversations)
 
     async def _render_history(self) -> None:
         """Re-render conversation history into the UI."""
@@ -113,14 +132,12 @@ class VirtualAgentApp(App):
                     if isinstance(part, UserPromptPart):
                         await container.mount(Static(f"[#e6a855]┃[/] {part.content}", classes="user-message"))
                     elif isinstance(part, ToolReturnPart):
-                        lines = str(part.content).split("\n")
-                        for i, line in enumerate(lines):
-                            prefix = "│ └─ " if i == 0 else "│    "
-                            await container.mount(Static(f"{prefix}{line}", classes="tool-result", markup=False))
+                        for widget in format_tool_result(part.content):
+                            await container.mount(widget)
             elif isinstance(msg, ModelResponse):
                 for part in msg.parts:
                     if isinstance(part, ToolCallPart):
-                        await container.mount(Static(f"│ ⚡ {part.tool_name}: {format_tool_args(part.args)}", classes="tool-call", markup=False))
+                        await container.mount(format_tool_call(part))
                     elif isinstance(part, TextPart):
                         await container.mount(Markdown(f"╰ {part.content}", classes="agent-message"))
                         await container.mount(Static("", classes="turn-separator"))
@@ -182,25 +199,13 @@ class VirtualAgentApp(App):
                 if isinstance(node, CallToolsNode):
                     for part in node.model_response.parts:
                         if isinstance(part, ToolCallPart):
-                            tool_msg = Static(
-                                f"│ ⚡ {part.tool_name}: {format_tool_args(part.args)}",
-                                classes="tool-call",
-                                markup=False,
-                            )
-                            await container.mount(tool_msg, before=response_widget)
+                            await container.mount(format_tool_call(part), before=response_widget)
                             container.scroll_end()
                 elif isinstance(node, ModelRequestNode):
                     for part in node.request.parts:
                         if isinstance(part, ToolReturnPart):
-                            lines = str(part.content).split("\n")
-                            for i, line in enumerate(lines):
-                                prefix = "│ └─ " if i == 0 else "│    "
-                                result_msg = Static(
-                                    f"{prefix}{line}",
-                                    classes="tool-result",
-                                    markup=False,
-                                )
-                                await container.mount(result_msg, before=response_widget)
+                            for widget in format_tool_result(part.content):
+                                await container.mount(widget, before=response_widget)
                             container.scroll_end()
 
             response_widget.update(f"╰ {run.result.output}")
@@ -211,12 +216,7 @@ class VirtualAgentApp(App):
 
     async def action_clear(self) -> None:
         """Start a new conversation (saves current one first)."""
-        # Save current conversation before clearing
-        if self.history:
-            self.conversations[self.conversation_id] = {
-                "messages": ModelMessagesTypeAdapter.dump_python(self.history, mode="json")
-            }
-
+        self._persist_conversation()
         # Start new conversation
         self.conversation_id = str(uuid.uuid4())
         self.history = []
@@ -266,12 +266,7 @@ class VirtualAgentApp(App):
         self.modified = False
         self._update_header()
 
-        # Save conversation history
-        if self.history:
-            self.conversations[self.conversation_id] = {
-                "messages": ModelMessagesTypeAdapter.dump_python(self.history, mode="json")
-            }
-            save_chat_history(HISTORY_FILE, self.conversation_id, self.conversations)
+        self._persist_conversation()
 
         messages = self.query_one("#messages", VerticalScroll)
         confirm = Static(f"[Saved {count} files to {self.workspace_path}/]", classes="system-message")

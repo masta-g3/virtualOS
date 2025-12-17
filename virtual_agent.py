@@ -9,13 +9,15 @@ from pydantic_ai.models.openai import OpenAIResponsesModelSettings
 
 load_dotenv()
 
+VIRTUAL_ROOT = "/home/user"
+
 
 @dataclass
 class VirtualFileSystem:
     """In-memory filesystem. Data is lost when the script ends."""
 
     files: dict[str, str] = field(default_factory=dict)
-    cwd: str = "/home/user"
+    cwd: str = VIRTUAL_ROOT
 
     def _resolve(self, path: str) -> str:
         if path.startswith("/"):
@@ -62,7 +64,7 @@ class VirtualFileSystem:
             return f"Deleted {full_path}"
         return f"Error: File {full_path} not found"
 
-    def load_from_disk(self, host_path: Path, virtual_root: str = "/home/user") -> int:
+    def load_from_disk(self, host_path: Path, virtual_root: str = VIRTUAL_ROOT) -> int:
         """Load files from host folder into virtual filesystem. Returns count."""
         count = 0
         if not host_path.exists():
@@ -79,7 +81,7 @@ class VirtualFileSystem:
                     pass
         return count
 
-    def save_to_disk(self, host_path: Path, virtual_root: str = "/home/user") -> int:
+    def save_to_disk(self, host_path: Path, virtual_root: str = VIRTUAL_ROOT) -> int:
         """Save virtual files back to host folder. Returns count."""
         count = 0
         host_path.mkdir(parents=True, exist_ok=True)
@@ -107,9 +109,10 @@ agent = Agent(
     system_prompt=(
         "You are a coding assistant in a Virtual Terminal. "
         "You can manipulate files and run simulated bash commands in your virtual filesystem. "
-        "Available commands: ls, cat (read only), echo (with > to write files), rm, pwd, cd, python. "
-        "No heredoc syntax - use echo with \\n for multiline content. "
-        "When asked to write code, save it to a file first."
+        "Available commands: ls, cat, echo, rm, pwd, cd, python. "
+        "Echo syntax: echo \"content\" > file.txt (no -e or -n flags). "
+        "For multiline content, use \\n: echo \"line1\\nline2\" > file.txt "
+        "When asked to write code, save it to a file first, then run with: python filename.py"
     ),
     model_settings=OpenAIResponsesModelSettings(
         openai_reasoning_effort="high",
@@ -143,10 +146,7 @@ def run_shell(ctx: RunContext[AgentDeps], command: str) -> str:
         return fs.cwd
 
     if cmd == "cd":
-        if arg.startswith("/"):
-            fs.cwd = arg
-        else:
-            fs.cwd = f"{fs.cwd.rstrip('/')}/{arg}"
+        fs.cwd = fs._resolve(arg or ".")
         return f"Changed directory to {fs.cwd}"
 
     if cmd == "cat":
@@ -156,9 +156,15 @@ def run_shell(ctx: RunContext[AgentDeps], command: str) -> str:
         return fs.delete(arg)
 
     if cmd == "echo":
+        # Skip flags like -e, -n (agent sometimes uses them despite instructions)
+        while arg.startswith("-") and " " in arg:
+            _, arg = arg.split(" ", 1)
         if ">" in arg:
             content_part, file_part = arg.rsplit(">", 1)
-            content = content_part.strip().strip('"').strip("'")
+            content = content_part.strip()
+            # Strip one matching pair of outer quotes only (preserve internal quotes like ''')
+            if len(content) >= 2 and content[0] == content[-1] and content[0] in "\"'":
+                content = content[1:-1]
             content = content.replace("\\n", "\n").replace("\\t", "\t")
             filename = file_part.strip()
             return fs.write(filename, content)
@@ -170,8 +176,8 @@ def run_shell(ctx: RunContext[AgentDeps], command: str) -> str:
             return "Error: No workspace configured for Python execution."
         fs.save_to_disk(workspace)
         script_path = arg
-        if script_path.startswith("/home/user/"):
-            script_path = script_path[len("/home/user/"):]
+        if script_path.startswith(VIRTUAL_ROOT + "/"):
+            script_path = script_path[len(VIRTUAL_ROOT) + 1:]
         try:
             result = subprocess.run(
                 ["python", script_path],
@@ -191,7 +197,7 @@ def run_shell(ctx: RunContext[AgentDeps], command: str) -> str:
 async def main():
     print("--- Initializing Virtual OS ---")
     virtual_fs = VirtualFileSystem()
-    virtual_fs.files["/home/user/readme.txt"] = "Welcome to the Matrix."
+    virtual_fs.files[f"{VIRTUAL_ROOT}/readme.txt"] = "Welcome to the Matrix."
 
     deps = AgentDeps(fs=virtual_fs, user_name="Neo")
 
