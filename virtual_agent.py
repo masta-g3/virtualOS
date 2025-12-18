@@ -3,9 +3,12 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import requests
 from dotenv import load_dotenv
 from pydantic_ai import Agent, RunContext, UsageLimits
 from pydantic_ai.models.openai import OpenAIResponsesModelSettings
+
+from research_tools import search_papers, get_summaries, S3_BASE
 
 load_dotenv()
 
@@ -103,17 +106,55 @@ class AgentDeps:
     workspace_path: Path | None = None
 
 
+SYSTEM_PROMPT = """\
+You are a research assistant with access to the LLMpedia arXiv paper database.
+
+## Tools
+
+File operations:
+- write_file(path, content): Create or overwrite a file
+- read_file(path): Read file contents
+- run_shell(command): Shell commands (ls, rm, pwd, cd, python)
+
+Research tools:
+- search_arxiv(...): Search papers by semantic query, title, author, date filters
+- get_paper_summaries(codes, resolution): Get summaries at low/medium/high detail
+- fetch_paper(code): Download full paper markdown to /home/user/papers/
+
+## Research Workflow
+
+### Two Modes
+
+**Narrow/Deep** (1-3 papers, need details):
+- Skip summaries, fetch full papers directly
+- Example: "Find the original attention paper" → download and read
+
+**Broad/Survey** (5+ papers, need overview):
+- Start with low/medium summaries, triage, then escalate selectively
+- Example: "RLHF advances?" → summaries first → drill into 2-3
+
+### Escalation Path
+low summary → medium → high → full paper
+
+### Flow
+1. DISCOVER: search_arxiv with appropriate filters
+2. EVALUATE: Choose narrow/deep or broad/survey path
+3. ESCALATE: Only fetch full papers when summaries aren't enough
+4. ITERATE: Refine queries, follow interesting threads
+5. SYNTHESIZE: Review scratchpad, cite papers with arxiv codes
+
+## Scratchpad
+
+Maintain /home/user/scratchpad.md to accumulate findings:
+- read_file to get current state
+- Append new findings
+- write_file to save updates
+"""
+
 agent = Agent(
     "openai-responses:gpt-5.1-codex-mini",
     deps_type=AgentDeps,
-    system_prompt=(
-        "You are a coding assistant in a sandboxed Virtual Terminal.\n"
-        "Available tools:\n"
-        "- write_file(path, content): Create or overwrite a file\n"
-        "- read_file(path): Read file contents\n"
-        "- run_shell(command): Shell commands (ls, rm, pwd, cd, python)\n\n"
-        "Workflow: write_file to create scripts, run_shell('python script.py') to execute."
-    ),
+    system_prompt=SYSTEM_PROMPT,
     model_settings=OpenAIResponsesModelSettings(
         openai_reasoning_effort="high",
         openai_reasoning_summary="detailed",
@@ -190,6 +231,110 @@ def run_shell(ctx: RunContext[AgentDeps], command: str) -> str:
             return "Error: Execution timed out (30s limit)."
 
     return f"Error: Command '{cmd}' not implemented in virtual sandbox."
+
+
+@agent.tool
+def search_arxiv(
+    ctx: RunContext[AgentDeps],
+    query: str | None = None,
+    title_contains: str | None = None,
+    abstract_contains: str | None = None,
+    author: str | None = None,
+    published_after: str | None = None,
+    published_before: str | None = None,
+    limit: int = 10
+) -> str:
+    """
+    Search arXiv papers in LLMpedia database.
+
+    Args:
+        query: Semantic search query (finds conceptually similar papers)
+        title_contains: Substring to match in paper titles
+        abstract_contains: Substring to match in abstracts
+        author: Author name to filter by
+        published_after: Filter papers after this date (YYYY-MM-DD)
+        published_before: Filter papers before this date (YYYY-MM-DD)
+        limit: Maximum results (default 10, max 50)
+    """
+    limit = min(limit, 50)
+    results = search_papers(
+        query=query,
+        title_contains=title_contains,
+        abstract_contains=abstract_contains,
+        author=author,
+        published_after=published_after,
+        published_before=published_before,
+        limit=limit
+    )
+
+    if not results:
+        return "No papers found matching criteria."
+
+    lines = [f"Found {len(results)} papers:\n"]
+    for paper in results:
+        lines.append(f"[{paper['arxiv_code']}] {paper['title']} ({paper['published']})")
+        lines.append(f"  Authors: {paper['authors'][:80]}...")
+        if paper.get('similarity'):
+            lines.append(f"  Similarity: {paper['similarity']}")
+        if paper.get('abstract'):
+            lines.append(f"  Abstract: {paper['abstract'][:200]}...")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+@agent.tool
+def get_paper_summaries(
+    ctx: RunContext[AgentDeps],
+    arxiv_codes: list[str],
+    resolution: str = "medium"
+) -> str:
+    """
+    Get summaries for papers at specified detail level.
+
+    Args:
+        arxiv_codes: List of arXiv paper codes (e.g., ["2401.12345"])
+        resolution: Detail level - "low" (~500 tokens), "medium" (~1000), "high" (~2500)
+    """
+    if not arxiv_codes:
+        return "Error: No arxiv codes provided."
+
+    summaries = get_summaries(arxiv_codes, resolution)
+
+    if not summaries:
+        return "No summaries found for the provided arxiv codes."
+
+    lines = []
+    for code, summary in summaries.items():
+        lines.append(f"## {code}\n")
+        lines.append(summary)
+        lines.append("\n---\n")
+
+    return "\n".join(lines)
+
+
+@agent.tool
+def fetch_paper(ctx: RunContext[AgentDeps], arxiv_code: str) -> str:
+    """
+    Download full paper markdown into the virtual filesystem.
+
+    The paper will be saved to /home/user/papers/{arxiv_code}.md and can be
+    read using the read_file tool.
+
+    Args:
+        arxiv_code: The arXiv paper code (e.g., "2401.12345")
+    """
+    url = f"{S3_BASE}/{arxiv_code}/paper.md"
+    response = requests.get(url, timeout=30)
+
+    if response.status_code != 200:
+        return f"Error: Could not download paper {arxiv_code} (HTTP {response.status_code})"
+
+    content = response.text
+    path = f"{VIRTUAL_ROOT}/papers/{arxiv_code}.md"
+    ctx.deps.fs.write(path, content)
+
+    return f"Downloaded {arxiv_code} to {path} ({len(content):,} chars)"
 
 
 async def main():

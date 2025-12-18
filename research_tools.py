@@ -12,7 +12,10 @@ from concurrent.futures import ThreadPoolExecutor
 
 import psycopg2
 import requests
+from dotenv import load_dotenv
 from google import genai
+
+load_dotenv()
 
 DB_URL = os.getenv(
     "LLMPEDIA_DB_URL",
@@ -33,10 +36,11 @@ def _get_connection():
 
 
 def _get_embedding(text: str) -> list[float]:
-    client = genai.Client()
+    api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GOOGLE_GENERATIVE_AI_API_KEY")
+    client = genai.Client(api_key=api_key)
     response = client.models.embed_content(
         model=EMBEDDING_MODEL,
-        content=text
+        contents=text
     )
     return response.embeddings[0].values
 

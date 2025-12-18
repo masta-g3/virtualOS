@@ -6,7 +6,7 @@ PydanticAI agent experiments - sandboxed AI agents with tool use.
 
 **Less is more.** This codebase prioritizes simplicity and clarity over features. Before adding anything, ask: is this essential?
 
-- `virtual_agent.py` is ~100 lines - one agent, one tool, one dataclass
+- `virtual_agent.py` is ~200 lines - one agent, file tools + research tools
 - `tui.py` is ~280 lines - view layer with visual polish (tree-style messages, animated status)
 - No abstractions until proven necessary
 - No configuration beyond what's needed
@@ -38,33 +38,40 @@ pydantic-agents/
 A PydanticAI agent operating in a sandboxed environment:
 
 ```
-┌─────────────────────────────────────────────┐
-│                   Agent                     │
-│  (LLM with system prompt + tool access)     │
-└─────────────────┬───────────────────────────┘
-                  │ calls
-        ┌─────────┼─────────┐
-        ▼         ▼         ▼
-┌────────────┐ ┌────────┐ ┌──────────┐
-│ write_file │ │read_file│ │run_shell │
-│ (create)   │ │ (read) │ │(ls,rm,cd,│
-└─────┬──────┘ └───┬────┘ │pwd,python)│
-      │            │      └─────┬────┘
-      └────────────┼────────────┘
-                   ▼
-┌─────────────────────────────────────────────┐
-│          VirtualFileSystem                  │
-│  (in-memory dict, no real disk access)      │
-└─────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                            Agent                                │
+│           (LLM with system prompt + tool access)                │
+└──────────────────────────────┬──────────────────────────────────┘
+                               │ calls
+        ┌──────────┬───────────┼───────────┬──────────────┐
+        ▼          ▼           ▼           ▼              ▼
+┌────────────┐ ┌────────┐ ┌──────────┐ ┌────────────┐ ┌───────────┐
+│ write_file │ │read_file│ │run_shell │ │search_arxiv│ │fetch_paper│
+└─────┬──────┘ └───┬────┘ └────┬─────┘ └─────┬──────┘ └─────┬─────┘
+      │            │           │             │              │
+      └────────────┼───────────┘             │              │
+                   ▼                         ▼              ▼
+┌─────────────────────────────────┐  ┌─────────────────────────────┐
+│      VirtualFileSystem          │  │      research_tools.py      │
+│  (in-memory dict, sandboxed)    │  │  (LLMpedia DB + S3)         │
+└─────────────────────────────────┘  └─────────────────────────────┘
 ```
 
-**Tools:**
+**File Tools:**
 
 | Tool | Purpose | Parameters |
 |------|---------|------------|
 | `write_file` | Create/overwrite files | `path`, `content` |
 | `read_file` | Read file contents | `path` |
 | `run_shell` | Shell commands | `command` (ls, rm, pwd, cd, python) |
+
+**Research Tools:**
+
+| Tool | Purpose | Parameters |
+|------|---------|------------|
+| `search_arxiv` | Search papers in LLMpedia | `query`, `title_contains`, `author`, `published_after/before`, `limit` |
+| `get_paper_summaries` | Get summaries at resolution | `arxiv_codes`, `resolution` (low/medium/high) |
+| `fetch_paper` | Download full paper to VFS | `arxiv_code` |
 
 **Key components:**
 
@@ -73,6 +80,18 @@ A PydanticAI agent operating in a sandboxed environment:
 - Structured tools for file ops (no shell parsing issues)
 
 **Safety:** All file operations happen in a Python dictionary. The agent cannot access the real filesystem.
+
+### Research Workflow
+
+The agent supports two research modes against the LLMpedia arXiv database:
+
+**Narrow/Deep** (1-3 papers): Skip summaries → `fetch_paper` → `read_file`
+
+**Broad/Survey** (5+ papers): `search_arxiv` → `get_paper_summaries` (low/medium) → triage → escalate selectively
+
+Escalation path: low summary → medium → high → full paper
+
+The agent maintains a scratchpad at `/home/user/scratchpad.md` to accumulate research findings.
 
 ## Adding New Agents
 
