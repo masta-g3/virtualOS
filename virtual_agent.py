@@ -3,9 +3,14 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from typing import Literal
+
 import requests
 from dotenv import load_dotenv
+
 from pydantic_ai import Agent, RunContext, UsageLimits
+from pydantic_ai.models.anthropic import AnthropicModelSettings
+from pydantic_ai.models.google import GoogleModelSettings
 from pydantic_ai.models.openai import OpenAIResponsesModelSettings
 
 from research_tools import search_papers, get_summaries, S3_BASE
@@ -13,6 +18,39 @@ from research_tools import search_papers, get_summaries, S3_BASE
 load_dotenv()
 
 VIRTUAL_ROOT = "/home/user"
+
+MODELS: dict[str, str] = {
+    "openai": "openai-responses:gpt-5.1-codex-mini",
+    "gemini": "google-gla:gemini-3-flash-preview",
+    "haiku": "anthropic:claude-haiku-4-5",
+}
+
+ThinkingEffort = Literal["low", "medium", "high"] | None
+
+ANTHROPIC_BUDGET = {"low": 1024, "medium": 4096, "high": 16384}
+
+
+def _build_settings(model_key: str, thinking_effort: ThinkingEffort):
+    """Build model-specific settings from unified thinking_effort."""
+    if model_key == "openai":
+        return OpenAIResponsesModelSettings(
+            openai_reasoning_summary="detailed",
+            openai_reasoning_effort=thinking_effort or "none",
+        )
+
+    if model_key == "gemini":
+        return GoogleModelSettings(
+            google_thinking_config={"thinking_level": thinking_effort or "minimal"}
+        )
+
+    if model_key == "haiku":
+        if thinking_effort:
+            return AnthropicModelSettings(
+                anthropic_thinking={"type": "enabled", "budget_tokens": ANTHROPIC_BUDGET[thinking_effort]}
+            )
+        return None
+
+    return None
 
 
 @dataclass
@@ -151,18 +189,7 @@ Maintain /home/user/scratchpad.md to accumulate findings:
 - write_file to save updates
 """
 
-agent = Agent(
-    "openai-responses:gpt-5.1-codex-mini",
-    deps_type=AgentDeps,
-    system_prompt=SYSTEM_PROMPT,
-    model_settings=OpenAIResponsesModelSettings(
-        openai_reasoning_effort="high",
-        openai_reasoning_summary="detailed",
-    ),
-)
 
-
-@agent.tool
 def write_file(ctx: RunContext[AgentDeps], path: str, content: str) -> str:
     """
     Write content to a file (creates or overwrites).
@@ -174,7 +201,6 @@ def write_file(ctx: RunContext[AgentDeps], path: str, content: str) -> str:
     return ctx.deps.fs.write(path, content)
 
 
-@agent.tool
 def read_file(ctx: RunContext[AgentDeps], path: str) -> str:
     """
     Read contents of a file.
@@ -185,7 +211,6 @@ def read_file(ctx: RunContext[AgentDeps], path: str) -> str:
     return ctx.deps.fs.read(path)
 
 
-@agent.tool
 def run_shell(ctx: RunContext[AgentDeps], command: str) -> str:
     """
     Execute a shell command. Use write_file/read_file for file operations.
@@ -233,7 +258,6 @@ def run_shell(ctx: RunContext[AgentDeps], command: str) -> str:
     return f"Error: Command '{cmd}' not implemented in virtual sandbox."
 
 
-@agent.tool
 def search_arxiv(
     ctx: RunContext[AgentDeps],
     query: str | None = None,
@@ -283,7 +307,6 @@ def search_arxiv(
     return "\n".join(lines)
 
 
-@agent.tool
 def get_paper_summaries(
     ctx: RunContext[AgentDeps],
     arxiv_codes: list[str],
@@ -313,7 +336,6 @@ def get_paper_summaries(
     return "\n".join(lines)
 
 
-@agent.tool
 def fetch_paper(ctx: RunContext[AgentDeps], arxiv_code: str) -> str:
     """
     Download full paper markdown into the virtual filesystem.
@@ -335,6 +357,26 @@ def fetch_paper(ctx: RunContext[AgentDeps], arxiv_code: str) -> str:
     ctx.deps.fs.write(path, content)
 
     return f"Downloaded {arxiv_code} to {path} ({len(content):,} chars)"
+
+
+TOOLS = [write_file, read_file, run_shell, search_arxiv, get_paper_summaries, fetch_paper]
+
+
+def create_agent(
+    model_key: str = "openai",
+    thinking_effort: ThinkingEffort = "high"
+) -> Agent[AgentDeps]:
+    """Create agent with specified model and thinking effort."""
+    return Agent(
+        MODELS[model_key],
+        deps_type=AgentDeps,
+        system_prompt=SYSTEM_PROMPT,
+        model_settings=_build_settings(model_key, thinking_effort),
+        tools=TOOLS,
+    )
+
+
+agent = create_agent()
 
 
 async def main():

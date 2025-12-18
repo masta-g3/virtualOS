@@ -42,8 +42,17 @@ Screen {
 }
 
 .user-message {
-    color: #e8e6e3;
+    height: auto;
     margin: 0 0 1 0;
+}
+
+.user-prefix {
+    color: #e6a855;
+    width: 2;
+}
+
+.user-text {
+    color: #e8e6e3;
 }
 
 .agent-message {
@@ -88,4 +97,35 @@ Screen {
 
 #prompt:focus {
     border: tall #e6a855;
+}
+
+/* === Selector Modal === */
+SelectorScreen {
+    align: center middle;
+    background: rgba(10, 10, 11, 0.85);
+}
+
+#selector-title {
+    color: #e6a855;
+    text-style: bold;
+    padding: 0 0 1 0;
+    text-align: center;
+}
+
+#selector-list {
+    width: auto;
+    min-width: 40;
+    max-height: 12;
+    background: #141416;
+    border: round #3a3a3d;
+    padding: 0 1;
+}
+
+#selector-list:focus {
+    border: round #e6a855;
+}
+
+#selector-list > .option-list--option-highlighted {
+    background: #2a2a2d;
+    color: #e6a855;
 }

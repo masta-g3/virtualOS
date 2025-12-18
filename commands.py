@@ -66,20 +66,27 @@ async def cmd_sync(app: "VirtualAgentApp", args: str) -> str | None:
     return None
 
 
-@command("model", help="Show or change LLM model", usage="/model [NAME]")
-async def cmd_model(app: "VirtualAgentApp", args: str) -> str:
-    from pydantic_ai.models.openai import OpenAIResponsesModel
-    from virtual_agent import agent
+@command("model", help="Select or switch model", usage="/model [NAME]")
+async def cmd_model(app: "VirtualAgentApp", args: str) -> str | None:
+    args = args.strip()
 
     if not args:
-        return f"Current model: `{agent.model.model_name}`"
+        app.show_model_selector()
+        return None
 
-    new_model = args.strip()
-    if not new_model or " " in new_model:
-        return f"Invalid model name: {new_model}"
+    return app.switch_model(args)
 
-    agent.model = OpenAIResponsesModel(new_model)
-    return f"Model changed to: `{new_model}`"
+
+@command("thinking", help="Select thinking effort level", usage="/thinking [LEVEL]")
+async def cmd_thinking(app: "VirtualAgentApp", args: str) -> str | None:
+    args = args.strip()
+
+    if not args:
+        app.show_thinking_selector()
+        return None
+
+    level = None if args == "off" else args
+    return app.set_thinking(level)
 
 
 @command("quit", help="Exit the application")

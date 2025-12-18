@@ -7,10 +7,24 @@ from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, ToolCall
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, VerticalScroll
-from textual.widgets import Input, Markdown, Static
+from textual.screen import ModalScreen
+from textual.widgets import Input, Markdown, OptionList, Static
+from textual.widgets.option_list import Option
 
 from commands import dispatch
-from virtual_agent import VirtualFileSystem, AgentDeps, agent, VIRTUAL_ROOT
+from virtual_agent import VirtualFileSystem, AgentDeps, create_agent, MODELS, ThinkingEffort, VIRTUAL_ROOT
+
+
+def user_message_widget(content: str) -> Horizontal:
+    """Create a user message with selectable content."""
+    return Horizontal(
+        Static("┃ ", classes="user-prefix"),
+        Static(content, classes="user-text", markup=False),
+        classes="user-message",
+    )
+
+from commands import dispatch
+from virtual_agent import VirtualFileSystem, AgentDeps, create_agent, MODELS, ThinkingEffort, VIRTUAL_ROOT
 
 WORKSPACE_PATH = Path("./workspace")
 HISTORY_FILE = WORKSPACE_PATH / ".chat_history.json"
@@ -60,6 +74,35 @@ def format_tool_call(part: ToolCallPart) -> Static:
     return Static(f"│ ⚡ {part.tool_name}: {format_tool_args(part.args)}", classes="tool-call", markup=False)
 
 
+class SelectorScreen(ModalScreen[str | None]):
+    """Modal selector for models/thinking levels. Returns selected key or None on ESC."""
+
+    BINDINGS = [Binding("escape", "cancel", "Cancel")]
+
+    def __init__(self, title: str, options: list[tuple[str, str]], current: str | None = None):
+        super().__init__()
+        self.title = title
+        self.options = options
+        self.current = current
+
+    def compose(self) -> ComposeResult:
+        yield Static(f"[b]{self.title}[/b]", id="selector-title")
+        option_list = OptionList(id="selector-list")
+        for key, label in self.options:
+            marker = "→ " if key == self.current else "  "
+            option_list.add_option(Option(f"{marker}{label}", id=key))
+        yield option_list
+
+    def on_mount(self) -> None:
+        self.query_one("#selector-list", OptionList).focus()
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        self.dismiss(event.option.id)
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
 class VirtualAgentApp(App):
     """Minimal TUI for the virtual agent."""
 
@@ -86,6 +129,10 @@ class VirtualAgentApp(App):
         self._snapshot = dict(self.fs.files)
         self.deps = AgentDeps(fs=self.fs, user_name="user", workspace_path=self.workspace_path)
 
+        self.current_model = "openai"
+        self.thinking_effort: ThinkingEffort = "high"
+        self.agent = create_agent(self.current_model, self.thinking_effort)
+
         # Load or create conversation
         current_id, conversations = load_chat_history(HISTORY_FILE)
         if current_id and current_id in conversations:
@@ -97,6 +144,62 @@ class VirtualAgentApp(App):
             self.conversation_id = str(uuid.uuid4())
             self.history = []
         self.conversations = conversations
+
+    def switch_model(self, model_key: str) -> str:
+        """Switch to a different model. Returns status message."""
+        if model_key not in MODELS:
+            return f"Unknown model: {model_key}. Available: {', '.join(MODELS.keys())}"
+
+        self.current_model = model_key
+        self.agent = create_agent(model_key, self.thinking_effort)
+        return f"Switched to {model_key}"
+
+    def set_thinking(self, level: ThinkingEffort) -> str:
+        """Set thinking effort level. Returns status message."""
+        valid = {"low", "medium", "high", None}
+        if level not in valid:
+            return f"Invalid level. Use: low, medium, high, or off"
+
+        self.thinking_effort = level
+        self.agent = create_agent(self.current_model, self.thinking_effort)
+        return f"Thinking effort: {level or 'off'}"
+
+    def show_model_selector(self) -> None:
+        """Show model selector modal."""
+        options = [(key, f"{key} ({model_id})") for key, model_id in MODELS.items()]
+        self.push_screen(
+            SelectorScreen("Select Model", options, self.current_model),
+            callback=self._on_model_selected
+        )
+
+    def _on_model_selected(self, selected: str | None) -> None:
+        """Handle model selection result."""
+        if selected and selected != self.current_model:
+            msg = self.switch_model(selected)
+            self._show_system_message(msg)
+
+    def show_thinking_selector(self) -> None:
+        """Show thinking level selector modal."""
+        options = [("high", "high"), ("medium", "medium"), ("low", "low"), ("off", "off")]
+        current = self.thinking_effort or "off"
+        self.push_screen(
+            SelectorScreen("Thinking Effort", options, current),
+            callback=self._on_thinking_selected
+        )
+
+    def _on_thinking_selected(self, selected: str | None) -> None:
+        """Handle thinking level selection result."""
+        if selected:
+            level = None if selected == "off" else selected
+            if level != self.thinking_effort:
+                msg = self.set_thinking(level)
+                self._show_system_message(msg)
+
+    def _show_system_message(self, msg: str) -> None:
+        """Show a system message in the chat."""
+        messages = self.query_one("#messages", VerticalScroll)
+        messages.mount(Static(f"[{msg}]", classes="system-message"))
+        messages.scroll_end()
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="header"):
@@ -189,7 +292,7 @@ class VirtualAgentApp(App):
         container: VerticalScroll,
     ) -> None:
         """Run agent with streaming and tool visibility."""
-        async with agent.iter(
+        async with self.agent.iter(
             prompt,
             deps=self.deps,
             message_history=self.history,

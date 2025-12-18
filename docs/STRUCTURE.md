@@ -16,7 +16,7 @@ PydanticAI agent experiments - sandboxed AI agents with tool use.
 
 ```
 pydantic-agents/
-├── virtual_agent.py    # Agent library (VirtualFileSystem, AgentDeps, agent)
+├── virtual_agent.py    # Agent library (VirtualFileSystem, create_agent, MODELS)
 ├── tui.py              # Textual TUI (imports from virtual_agent)
 ├── tui.tcss            # TUI styles
 ├── commands.py         # Slash command registry and handlers
@@ -133,6 +133,27 @@ The TUI loads files from `./workspace/` into the virtual filesystem on startup:
 - Agent can read/modify these files
 - Press `ctrl+s` to save changes back to `./workspace/`
 - Header shows `[modified]` when unsaved changes exist
+
+## Model Configuration
+
+The agent supports multiple LLM providers with unified thinking effort control:
+
+| Model Key | Provider | Model ID |
+|-----------|----------|----------|
+| `openai` | OpenAI | `gpt-5.1-codex-mini` (reasoning) |
+| `gemini` | Google | `gemini-3-flash-preview` |
+| `haiku` | Anthropic | `claude-haiku-4-5` |
+
+**Slash commands:**
+- `/model` - Open model selector (↑↓ to navigate, Enter to select, ESC to cancel)
+- `/model <name>` - Switch to model directly
+- `/thinking` - Open thinking level selector
+- `/thinking <level>` - Set level directly (low, medium, high, off)
+
+**Thinking effort** maps to each provider's native config:
+- OpenAI: `reasoning_effort` parameter
+- Gemini: `thinking_level` in thinking config
+- Anthropic: `budget_tokens` (1024/4096/16384)
 
 ## Dependencies
 
