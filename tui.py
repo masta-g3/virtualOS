@@ -12,18 +12,8 @@ from textual.widgets import Input, Markdown, OptionList, Static
 from textual.widgets.option_list import Option
 
 from commands import dispatch
-from virtual_agent import VirtualFileSystem, AgentDeps, create_agent, MODELS, ThinkingEffort, VIRTUAL_ROOT
-
-
-def user_message_widget(content: str) -> Horizontal:
-    """Create a user message with selectable content."""
-    return Horizontal(
-        Static("┃ ", classes="user-prefix"),
-        Static(content, classes="user-text", markup=False),
-        classes="user-message",
-    )
-
-from commands import dispatch
+import settings
+from theme import load_theme, list_themes, generate_css, DEFAULT_THEME
 from virtual_agent import VirtualFileSystem, AgentDeps, create_agent, MODELS, ThinkingEffort, VIRTUAL_ROOT
 
 WORKSPACE_PATH = Path("./workspace")
@@ -106,7 +96,6 @@ class SelectorScreen(ModalScreen[str | None]):
 class VirtualAgentApp(App):
     """Minimal TUI for the virtual agent."""
 
-    CSS_PATH = "tui.tcss"
     BINDINGS = [
         Binding("ctrl+c", "quit", "Quit"),
         Binding("ctrl+l", "clear", "Clear"),
@@ -129,9 +118,13 @@ class VirtualAgentApp(App):
         self._snapshot = dict(self.fs.files)
         self.deps = AgentDeps(fs=self.fs, user_name="user", workspace_path=self.workspace_path)
 
-        self.current_model = "openai"
-        self.thinking_effort: ThinkingEffort = "high"
+        # Load persisted settings
+        self.current_model = settings.get("model", "openai")
+        self.thinking_effort: ThinkingEffort = settings.get("thinking", "high")
+        self.theme_name = settings.get("theme", DEFAULT_THEME)
+
         self.agent = create_agent(self.current_model, self.thinking_effort)
+        self._theme = load_theme(self.theme_name)
 
         # Load or create conversation
         current_id, conversations = load_chat_history(HISTORY_FILE)
@@ -145,6 +138,38 @@ class VirtualAgentApp(App):
             self.history = []
         self.conversations = conversations
 
+    def switch_theme(self, name: str) -> str:
+        """Switch to a different theme. Returns status message."""
+        available = list_themes()
+        if name not in available:
+            return f"Unknown theme: {name}. Available: {', '.join(available)}"
+
+        self._theme = load_theme(name)
+        self.theme_name = name
+        settings.set("theme", name)
+
+        # Replace CSS source and reapply to all widgets
+        self.stylesheet.add_source(generate_css(self._theme), read_from="theme")
+        self.stylesheet.reparse()
+        self.stylesheet.update(self)
+        self.refresh(layout=True)
+        return f"Theme: {name}"
+
+    def show_theme_selector(self) -> None:
+        """Show theme selector modal."""
+        themes = list_themes()
+        options = [(t, t) for t in themes]
+        self.push_screen(
+            SelectorScreen("Select Theme", options, self.theme_name),
+            callback=self._on_theme_selected
+        )
+
+    def _on_theme_selected(self, selected: str | None) -> None:
+        """Handle theme selection result."""
+        if selected and selected != self.theme_name:
+            msg = self.switch_theme(selected)
+            self._show_system_message(msg)
+
     def switch_model(self, model_key: str) -> str:
         """Switch to a different model. Returns status message."""
         if model_key not in MODELS:
@@ -152,6 +177,7 @@ class VirtualAgentApp(App):
 
         self.current_model = model_key
         self.agent = create_agent(model_key, self.thinking_effort)
+        settings.set("model", model_key)
         return f"Switched to {model_key}"
 
     def set_thinking(self, level: ThinkingEffort) -> str:
@@ -162,6 +188,7 @@ class VirtualAgentApp(App):
 
         self.thinking_effort = level
         self.agent = create_agent(self.current_model, self.thinking_effort)
+        settings.set("thinking", level)
         return f"Thinking effort: {level or 'off'}"
 
     def show_model_selector(self) -> None:
@@ -207,9 +234,13 @@ class VirtualAgentApp(App):
             yield Static("", id="header-status")
         yield VerticalScroll(id="messages")
         yield Input(placeholder="Type a message...", id="prompt")
-        yield Static("ctrl+s sync │ ctrl+l clear │ ctrl+c quit", id="footer")
 
     async def on_mount(self) -> None:
+        # Apply theme CSS (css property isn't auto-loaded)
+        self.stylesheet.add_source(generate_css(self._theme), read_from="theme")
+        self.stylesheet.reparse()
+        self.stylesheet.update(self)
+
         self.query_one("#prompt", Input).focus()
         if self.history:
             await self._render_history()
@@ -233,7 +264,8 @@ class VirtualAgentApp(App):
             if isinstance(msg, ModelRequest):
                 for part in msg.parts:
                     if isinstance(part, UserPromptPart):
-                        await container.mount(Static(f"[#e6a855]┃[/] {part.content}", classes="user-message"))
+                        accent = self._theme.colors["accent"]
+                        await container.mount(Static(f"[{accent}]┃[/] {part.content}", classes="user-message"))
                     elif isinstance(part, ToolReturnPart):
                         for widget in format_tool_result(part.content):
                             await container.mount(widget)
@@ -266,7 +298,8 @@ class VirtualAgentApp(App):
 
         input_widget.disabled = True
 
-        user_msg = Static(f"[#e6a855]┃[/] {prompt}", classes="user-message")
+        accent = self._theme.colors["accent"]
+        user_msg = Static(f"[{accent}]┃[/] {prompt}", classes="user-message")
         await messages.mount(user_msg)
         messages.scroll_end()
 
@@ -344,7 +377,8 @@ class VirtualAgentApp(App):
         frames = ["◐", "◓", "◑", "◒"]
         status = self.query_one("#header-status", Static)
         dot = frames[self._thinking_frame % len(frames)]
-        status.update(f"[#e6a855]{dot}[/] thinking...")
+        accent = self._theme.colors["accent"]
+        status.update(f"[{accent}]{dot}[/] thinking...")
         self._thinking_frame += 1
 
     def _update_header(self) -> None:

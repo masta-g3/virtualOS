@@ -18,8 +18,14 @@ PydanticAI agent experiments - sandboxed AI agents with tool use.
 pydantic-agents/
 ├── virtual_agent.py    # Agent library (VirtualFileSystem, create_agent, MODELS)
 ├── tui.py              # Textual TUI (imports from virtual_agent)
-├── tui.tcss            # TUI styles
 ├── commands.py         # Slash command registry and handlers
+├── theme.py            # Theme loader (load, list, generate CSS)
+├── settings.py         # User settings persistence
+├── themes/             # Built-in themes (YAML)
+│   ├── amber-dark.yaml
+│   ├── catppuccin-macchiato.yaml
+│   ├── gruvbox-dark.yaml
+│   └── solarized-light.yaml
 ├── research_tools.py   # LLMpedia DB queries (search, summaries, download)
 ├── workspace/          # Synced with VirtualFileSystem (ctrl+s to save)
 │   └── papers/         # Downloaded arXiv paper markdowns
@@ -155,6 +161,9 @@ The agent supports multiple LLM providers with unified thinking effort control:
 - `/model <name>` - Switch to model directly
 - `/thinking` - Open thinking level selector
 - `/thinking <level>` - Set level directly (low, medium, high, off)
+- `/theme` - Open theme selector
+- `/theme <name>` - Switch theme directly
+- `/theme list` - List available themes
 
 **Thinking effort** maps to each provider's native config:
 - OpenAI: `reasoning_effort` parameter
@@ -181,6 +190,7 @@ See `docs/history/20251218_test_coverage.md` for test design details.
 Managed via `uv`. Key packages:
 - `pydantic-ai` - Agent framework
 - `textual` - TUI framework
+- `pyyaml` - Theme file parsing
 - `python-dotenv` - Load `.env` files
 - `psycopg2-binary` - PostgreSQL client (research_tools)
 - `google-genai` - Gemini embeddings for semantic search

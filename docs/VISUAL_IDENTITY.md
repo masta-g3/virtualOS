@@ -12,48 +12,77 @@ Core principles:
 - **Hierarchy through typography** — Prefixes and spacing, not boxes and borders
 - **Motion with restraint** — Animate only system status, not content
 
-## Color Palette
+## Theme System
+
+Colors are defined in YAML theme files (`themes/*.yaml`). Switch themes with `/theme`.
+
+**Built-in themes:**
+- `amber-dark` (default) — warm amber on deep black
+- `catppuccin-macchiato` — soothing pastels
+- `gruvbox-dark` — retro earthy tones
+- `solarized-light` — low-contrast light mode
+
+**Custom themes:** Place YAML files in `~/.config/pyagents/themes/`
+
+## Color Slots
+
+Each theme defines 11 semantic color slots:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  BACKGROUNDS                                                │
 │  ──────────                                                 │
-│  #0a0a0b  ████  Deep black (screen base)                    │
-│  #141416  ████  Surface (header, input)                     │
+│  bg_primary    Screen base                                  │
+│  bg_surface    Header, input, modals                        │
 │                                                             │
 │  TEXT                                                       │
 │  ────                                                       │
-│  #e8e6e3  ████  Primary (user messages)                     │
-│  #9a9894  ████  Secondary (agent responses)                 │
-│  #5c5a56  ████  Muted (footer, hints)                       │
+│  text_primary    User messages (highest contrast)           │
+│  text_secondary  Agent responses                            │
+│  text_muted      Footer, hints                              │
 │                                                             │
 │  ACCENT                                                     │
 │  ──────                                                     │
-│  #e6a855  ████  Amber (header, focus, user prefix)          │
+│  accent          Focus states, user prefix, interactive     │
 │                                                             │
 │  SEMANTIC                                                   │
 │  ────────                                                   │
-│  #7aa2f7  ████  Tool calls (soft blue)                      │
-│  #6b7280  ████  Tool results (neutral gray)                 │
-│  #5ce888  ████  Success/system messages (green)             │
-│  #e85c5c  ████  Errors (red)                                │
+│  tool_call       Tool execution (blue family)               │
+│  tool_result     Tool output (neutral)                      │
+│  success         Confirmations (green family)               │
+│  error           Problems (red family)                      │
 │                                                             │
 │  CHROME                                                     │
 │  ──────                                                     │
-│  #3a3a3d  ████  Borders, scrollbars                         │
+│  chrome          Borders, scrollbars                        │
 └─────────────────────────────────────────────────────────────┘
 ```
 
+**Default theme (amber-dark) values:**
+| Slot | Hex | Purpose |
+|------|-----|---------|
+| bg_primary | `#0a0a0b` | Deep black screen |
+| bg_surface | `#141416` | Elevated surfaces |
+| text_primary | `#e8e6e3` | User input |
+| text_secondary | `#9a9894` | Agent responses |
+| text_muted | `#5c5a56` | Footer hints |
+| accent | `#e6a855` | Amber focus/prefix |
+| tool_call | `#7aa2f7` | Tool execution |
+| tool_result | `#6b7280` | Tool output |
+| success | `#5ce888` | Confirmations |
+| error | `#e85c5c` | Errors |
+| chrome | `#3a3a3d` | Borders |
+
 ### Usage Rules
 
-| Element | Color | Rationale |
-|---------|-------|-----------|
-| User input | `#e8e6e3` | Highest contrast, user's words matter most |
-| Agent response | `#9a9894` | Secondary, let user content stand out |
-| Tool calls | `#7aa2f7` | Blue = action/process (universal convention) |
-| Tool results | `#6b7280` | Lowest priority, supporting info |
-| Focus states | `#e6a855` | Amber draws attention without alarm |
-| Errors | `#e85c5c` | Red = problem (universal convention) |
+| Element | Slot | Rationale |
+|---------|------|-----------|
+| User input | `text_primary` | Highest contrast, user's words matter most |
+| Agent response | `text_secondary` | Secondary, let user content stand out |
+| Tool calls | `tool_call` | Blue = action/process (universal convention) |
+| Tool results | `tool_result` | Lowest priority, supporting info |
+| Focus states | `accent` | Draws attention without alarm |
+| Errors | `error` | Red = problem (universal convention) |
 
 ## Visual Hierarchy
 
@@ -129,8 +158,6 @@ Located in header status zone (right-aligned). Amber colored.
 │                                                             │
 ├─────────────────────────────────────────────────────────────┤
 │ INPUT: text field with focus border                height: 3│
-├─────────────────────────────────────────────────────────────┤
-│ FOOTER: keybinding hints (centered, muted)         height: 1│
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -179,4 +206,4 @@ Only one status shown at a time. Thinking takes precedence.
 
 ---
 
-*This document describes the implemented visual system as of tui-009. Update when design evolves.*
+*This document describes the visual system. Theme colors are defined in `themes/*.yaml`.*

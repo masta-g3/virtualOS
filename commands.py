@@ -105,3 +105,23 @@ async def cmd_files(app: "VirtualAgentApp", args: str) -> str:
         size = len(files[path])
         lines.append(f"- `{path}` ({size} chars)")
     return "\n".join(lines)
+
+
+@command("theme", help="Select or switch theme", usage="/theme [NAME|list]")
+async def cmd_theme(app: "VirtualAgentApp", args: str) -> str | None:
+    args = args.strip()
+
+    if not args:
+        app.show_theme_selector()
+        return None
+
+    if args == "list":
+        from theme import list_themes
+        themes = list_themes()
+        lines = ["**Themes:**", ""]
+        for t in themes:
+            marker = "→ " if t == app.theme_name else "  "
+            lines.append(f"{marker}`{t}`")
+        return "\n".join(lines)
+
+    return app.switch_theme(args)

@@ -1,0 +1,15 @@
+name: amber-dark
+description: Warm amber on deep black
+
+colors:
+  bg_primary: "#0a0a0b"
+  bg_surface: "#141416"
+  text_primary: "#e8e6e3"
+  text_secondary: "#9a9894"
+  text_muted: "#5c5a56"
+  accent: "#e6a855"
+  tool_call: "#7aa2f7"
+  tool_result: "#6b7280"
+  success: "#5ce888"
+  error: "#e85c5c"
+  chrome: "#3a3a3d"

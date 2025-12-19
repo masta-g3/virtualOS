@@ -1,0 +1,15 @@
+name: gruvbox-dark
+description: Retro groove with warm colors
+
+colors:
+  bg_primary: "#1d2021"
+  bg_surface: "#282828"
+  text_primary: "#ebdbb2"
+  text_secondary: "#d5c4a1"
+  text_muted: "#665c54"
+  accent: "#fe8019"
+  tool_call: "#83a598"
+  tool_result: "#665c54"
+  success: "#b8bb26"
+  error: "#fb4934"
+  chrome: "#3c3836"
