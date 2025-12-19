@@ -41,7 +41,7 @@
       "Run touch to create empty file",
       "Run mv to rename/move file"
     ],
-    "status": "pending",
+    "status": "done",
     "priority": 2,
     "depends_on": [
       "agent-002"
@@ -57,7 +57,7 @@
       "Run grep pattern to search file contents",
       "Results show matching lines with context"
     ],
-    "status": "pending",
+    "status": "done",
     "priority": 2,
     "depends_on": [
       "agent-002"
@@ -312,5 +312,114 @@
     "status": "done",
     "created_at": "2025-12-18",
     "spec_file": "docs/history/20251218_cli-001_oneshot_mode.md"
+  },
+  {
+    "id": "port-001",
+    "description": "User can run agent with generateText and get response",
+    "steps": [
+      "Create aisdk-port directory with package.json and tsconfig.json",
+      "Install ai, @ai-sdk/openai, zod dependencies",
+      "Create minimal agent.ts using openai.responses() (Responses API, not regular completion)",
+      "Add system prompt matching Python SYSTEM_PROMPT",
+      "Verify: run via bun/ts-node, receive text response from model"
+    ],
+    "status": "done",
+    "priority": 1,
+    "depends_on": [],
+    "discovered_from": null,
+    "spec_file": null,
+    "created_at": "2025-12-18"
+  },
+  {
+    "id": "port-002",
+    "description": "Agent has virtual filesystem with read/write/shell tools",
+    "steps": [
+      "Port VirtualFileSystem class to TypeScript (files Map, cwd, _resolve)",
+      "Create write_file, read_file, run_shell tools with zod schemas",
+      "Wire tools to generateText with stopWhen: stepCountIs(10)",
+      "Verify: agent can create file, read it back, list directory"
+    ],
+    "status": "done",
+    "priority": 1,
+    "depends_on": [
+      "port-001"
+    ],
+    "discovered_from": null,
+    "spec_file": null,
+    "created_at": "2025-12-18"
+  },
+  {
+    "id": "port-003",
+    "description": "Agent has research tools (search, summaries, fetch)",
+    "steps": [
+      "Define Prisma function interfaces for searchPapers, getSummaries, getEmbedding",
+      "Create search_arxiv tool accepting injected Prisma functions",
+      "Create get_paper_summaries tool for resolution-based summaries",
+      "Create fetch_paper tool to download markdown from S3 to VFS",
+      "Verify: agent can search papers and fetch content using mock Prisma functions"
+    ],
+    "status": "pending",
+    "priority": 2,
+    "depends_on": [
+      "port-002"
+    ],
+    "discovered_from": null,
+    "spec_file": null,
+    "created_at": "2025-12-18"
+  },
+  {
+    "id": "port-004",
+    "description": "Agent supports multi-model configuration",
+    "steps": [
+      "Add model registry using openai.responses() for OpenAI (not regular openai())",
+      "Add google() for Gemini, anthropic() for Claude",
+      "Implement thinking effort mapping per provider (reasoningEffort, thinkingLevel, budgetTokens)",
+      "Export createAgent function with model/thinking params",
+      "Verify: switch models via parameter, confirm responses work with each provider"
+    ],
+    "status": "pending",
+    "priority": 2,
+    "depends_on": [
+      "port-001"
+    ],
+    "discovered_from": null,
+    "spec_file": null,
+    "created_at": "2025-12-18"
+  },
+  {
+    "id": "port-005",
+    "description": "Agent can be invoked via Vercel API route",
+    "steps": [
+      "Create route.ts POST handler accepting prompt in request body",
+      "Return agent response as JSON (text + tool calls)",
+      "Add proper error handling for API route",
+      "Verify: curl POST returns agent response, tool calls visible"
+    ],
+    "status": "pending",
+    "priority": 2,
+    "depends_on": [
+      "port-003"
+    ],
+    "discovered_from": null,
+    "spec_file": null,
+    "created_at": "2025-12-18"
+  },
+  {
+    "id": "port-006",
+    "description": "CLI one-shot mode mirrors Python behavior",
+    "steps": [
+      "Create cli.ts with argument parsing for prompt",
+      "Load workspace files into VFS on startup",
+      "Print final response to stdout",
+      "Verify: bun run cli.ts 'query' produces same output as python version"
+    ],
+    "status": "pending",
+    "priority": 3,
+    "depends_on": [
+      "port-003"
+    ],
+    "discovered_from": null,
+    "spec_file": null,
+    "created_at": "2025-12-18"
   }
 ]
