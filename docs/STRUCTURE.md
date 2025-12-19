@@ -23,10 +23,16 @@ pydantic-agents/
 ├── research_tools.py   # LLMpedia DB queries (search, summaries, download)
 ├── workspace/          # Synced with VirtualFileSystem (ctrl+s to save)
 │   └── papers/         # Downloaded arXiv paper markdowns
+├── tests/              # pytest test suite
+│   ├── conftest.py        # Shared fixtures
+│   ├── test_virtual_fs.py # VirtualFileSystem tests
+│   ├── test_tools.py      # Agent tool tests
+│   └── test_commands.py   # Slash command tests
 ├── pyproject.toml      # Dependencies (uv)
 ├── .env                # API keys (not committed)
 └── docs/
     ├── STRUCTURE.md       # This file
+    ├── TESTING.md         # Test suite documentation
     ├── VISUAL_IDENTITY.md # TUI design system (colors, prefixes, motion)
     └── history/           # Archived feature specs
 ```
@@ -155,6 +161,21 @@ The agent supports multiple LLM providers with unified thinking effort control:
 - Gemini: `thinking_level` in thinking config
 - Anthropic: `budget_tokens` (1024/4096/16384)
 
+## Testing
+
+```bash
+# Install dev dependencies
+uv sync --extra dev
+
+# Run all tests
+uv run pytest
+
+# Run specific file
+uv run pytest tests/test_virtual_fs.py -v
+```
+
+See `docs/history/20251218_test_coverage.md` for test design details.
+
 ## Dependencies
 
 Managed via `uv`. Key packages:
@@ -164,3 +185,7 @@ Managed via `uv`. Key packages:
 - `psycopg2-binary` - PostgreSQL client (research_tools)
 - `google-genai` - Gemini embeddings for semantic search
 - `requests` - HTTP client for S3 downloads
+
+Dev dependencies (`uv sync --extra dev`):
+- `pytest` - Test framework
+- `pytest-asyncio` - Async test support
