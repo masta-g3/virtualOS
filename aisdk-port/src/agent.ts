@@ -1,5 +1,8 @@
 import { generateText } from "ai";
 import { openai } from "@ai-sdk/openai";
+import { VirtualFileSystem } from "./virtual-fs.js";
+import { createFileTools } from "./tools/file-tools.js";
+import { createResearchTools } from "./tools/research-tools.js";
 
 const SYSTEM_PROMPT = `\
 You are a research assistant with access to the LLMpedia arXiv paper database.
@@ -49,20 +52,26 @@ Maintain /home/user/scratchpad.md to accumulate findings:
 export interface AgentResult {
   text: string;
   steps: number;
+  files: Map<string, string>;
 }
 
 export async function runAgent(prompt: string): Promise<AgentResult> {
   const model = openai.responses("gpt-5.1-codex-mini");
+  const fs = new VirtualFileSystem();
+  const { writeFile, readFile, runShell } = createFileTools(fs);
+  const { searchArxiv, getPaperSummaries, fetchPaper } = createResearchTools(fs);
 
   const result = await generateText({
     model,
     system: SYSTEM_PROMPT,
     prompt,
+    tools: { writeFile, readFile, runShell, searchArxiv, getPaperSummaries, fetchPaper },
     maxSteps: 50,
   });
 
   return {
     text: result.text,
     steps: result.steps.length,
+    files: fs.files,
   };
 }
