@@ -46,8 +46,10 @@ def _build_settings(model_key: str, thinking_effort: ThinkingEffort):
 
     if model_key == "haiku":
         if thinking_effort:
+            budget = ANTHROPIC_BUDGET[thinking_effort]
             return AnthropicModelSettings(
-                anthropic_thinking={"type": "enabled", "budget_tokens": ANTHROPIC_BUDGET[thinking_effort]}
+                max_tokens=budget + 8192,
+                anthropic_thinking={"type": "enabled", "budget_tokens": budget}
             )
         return None
 
@@ -215,7 +217,7 @@ def read_file(ctx: RunContext[AgentDeps], path: str) -> str:
 def run_shell(ctx: RunContext[AgentDeps], command: str) -> str:
     """
     Execute a shell command. Use write_file/read_file for file operations.
-    Supported: ls, rm, pwd, cd, python.
+    Supported: ls, rm, pwd, cd, mkdir, touch, mv, python.
     """
     fs = ctx.deps.fs
     parts = command.split(" ", 1)
@@ -234,6 +236,37 @@ def run_shell(ctx: RunContext[AgentDeps], command: str) -> str:
 
     if cmd == "rm":
         return fs.delete(arg)
+
+    if cmd == "mkdir":
+        if not arg:
+            return "Error: mkdir requires a directory path."
+        dir_path = fs._resolve(arg)
+        marker = f"{dir_path}/.dir"
+        if marker not in fs.files:
+            fs.files[marker] = ""
+        return f"Created directory {dir_path}"
+
+    if cmd == "touch":
+        if not arg:
+            return "Error: touch requires a file path."
+        full_path = fs._resolve(arg)
+        if full_path not in fs.files:
+            fs.files[full_path] = ""
+        return f"Touched {full_path}"
+
+    if cmd == "mv":
+        args = arg.split()
+        if len(args) != 2:
+            return "Error: mv requires source and destination paths."
+        src, dst = args
+        src_path = fs._resolve(src)
+        if src_path not in fs.files:
+            return f"Error: Source {src_path} does not exist."
+        content = fs.files[src_path]
+        dst_path = fs._resolve(dst)
+        fs.files[dst_path] = content
+        del fs.files[src_path]
+        return f"Moved {src_path} to {dst_path}"
 
     if cmd == "python":
         workspace = ctx.deps.workspace_path

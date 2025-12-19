@@ -75,7 +75,7 @@ A PydanticAI agent operating in a sandboxed environment:
 |------|---------|------------|
 | `write_file` | Create/overwrite files | `path`, `content` |
 | `read_file` | Read file contents | `path` |
-| `run_shell` | Shell commands | `command` (ls, rm, pwd, cd, python) |
+| `run_shell` | Shell commands | `command` (ls, rm, pwd, cd, mkdir, touch, mv, python) |
 
 **Research Tools:**
 
@@ -157,7 +157,6 @@ The agent supports multiple LLM providers with unified thinking effort control:
 | `haiku` | Anthropic | `claude-haiku-4-5` |
 
 **Slash commands:**
-- `/sessions` - Browse previous sessions (d to delete)
 - `/model` - Open model selector (↑↓ to navigate, Enter to select, ESC to cancel)
 - `/model <name>` - Switch to model directly
 - `/thinking` - Open thinking level selector
@@ -169,7 +168,7 @@ The agent supports multiple LLM providers with unified thinking effort control:
 **Thinking effort** maps to each provider's native config:
 - OpenAI: `reasoning_effort` parameter
 - Gemini: `thinking_level` in thinking config
-- Anthropic: `budget_tokens` (1024/4096/16384)
+- Anthropic: `budget_tokens` (1024/4096/16384), `max_tokens` = budget + 8192
 
 ## Testing
 

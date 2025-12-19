@@ -42,6 +42,45 @@ class TestRunShell:
         result = run_shell(mock_ctx, "wget http://example.com")
         assert "not implemented" in result
 
+    def test_mkdir_creates_directory_marker(self, mock_ctx):
+        result = run_shell(mock_ctx, "mkdir subdir")
+        assert "Created directory" in result
+        assert f"{VIRTUAL_ROOT}/subdir/.dir" in mock_ctx.deps.fs.files
+
+    def test_mkdir_no_arg_error(self, mock_ctx):
+        result = run_shell(mock_ctx, "mkdir")
+        assert "Error" in result
+
+    def test_touch_creates_empty_file(self, mock_ctx):
+        result = run_shell(mock_ctx, "touch newfile.txt")
+        assert "Touched" in result
+        assert mock_ctx.deps.fs.files[f"{VIRTUAL_ROOT}/newfile.txt"] == ""
+
+    def test_touch_existing_file_unchanged(self, mock_ctx):
+        mock_ctx.deps.fs.write("existing.txt", "content")
+        run_shell(mock_ctx, "touch existing.txt")
+        assert mock_ctx.deps.fs.files[f"{VIRTUAL_ROOT}/existing.txt"] == "content"
+
+    def test_touch_no_arg_error(self, mock_ctx):
+        result = run_shell(mock_ctx, "touch")
+        assert "Error" in result
+
+    def test_mv_moves_file(self, mock_ctx):
+        mock_ctx.deps.fs.write("old.txt", "data")
+        result = run_shell(mock_ctx, "mv old.txt new.txt")
+        assert "Moved" in result
+        assert f"{VIRTUAL_ROOT}/old.txt" not in mock_ctx.deps.fs.files
+        assert mock_ctx.deps.fs.files[f"{VIRTUAL_ROOT}/new.txt"] == "data"
+
+    def test_mv_missing_source_error(self, mock_ctx):
+        result = run_shell(mock_ctx, "mv nonexistent.txt dest.txt")
+        assert "Error" in result
+        assert "does not exist" in result
+
+    def test_mv_wrong_args_error(self, mock_ctx):
+        result = run_shell(mock_ctx, "mv onlyonepath")
+        assert "Error" in result
+
     def test_python_no_workspace(self, mock_ctx):
         mock_ctx.deps.workspace_path = None
         result = run_shell(mock_ctx, "python script.py")
