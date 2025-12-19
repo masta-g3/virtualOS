@@ -157,6 +157,7 @@ The agent supports multiple LLM providers with unified thinking effort control:
 | `haiku` | Anthropic | `claude-haiku-4-5` |
 
 **Slash commands:**
+- `/sessions` - Browse previous sessions (d to delete)
 - `/model` - Open model selector (↑↓ to navigate, Enter to select, ESC to cancel)
 - `/model <name>` - Switch to model directly
 - `/thinking` - Open thinking level selector

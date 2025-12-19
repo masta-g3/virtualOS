@@ -107,6 +107,12 @@ async def cmd_files(app: "VirtualAgentApp", args: str) -> str:
     return "\n".join(lines)
 
 
+@command("sessions", help="Browse previous sessions (d to delete)")
+async def cmd_sessions(app: "VirtualAgentApp", args: str) -> str | None:
+    app.show_sessions_selector()
+    return None
+
+
 @command("theme", help="Select or switch theme", usage="/theme [NAME|list]")
 async def cmd_theme(app: "VirtualAgentApp", args: str) -> str | None:
     args = args.strip()

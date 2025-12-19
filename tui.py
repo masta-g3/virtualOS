@@ -64,6 +64,19 @@ def format_tool_call(part: ToolCallPart) -> Static:
     return Static(f"│ ⚡ {part.tool_name}: {format_tool_args(part.args)}", classes="tool-call", markup=False)
 
 
+def get_session_preview(messages: list) -> str:
+    """Extract first user prompt as session preview."""
+    for msg in messages:
+        if msg.get("kind") == "request":
+            for part in msg.get("parts", []):
+                if part.get("part_kind") == "user-prompt":
+                    content = part.get("content", "")
+                    if len(content) > 40:
+                        return content[:37] + "..."
+                    return content
+    return "(empty session)"
+
+
 class SelectorScreen(ModalScreen[str | None]):
     """Modal selector for models/thinking levels. Returns selected key or None on ESC."""
 
@@ -88,6 +101,42 @@ class SelectorScreen(ModalScreen[str | None]):
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
         self.dismiss(event.option.id)
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
+class SessionSelectorScreen(ModalScreen[tuple[str, str] | None]):
+    """Session selector with delete support. Returns (action, id) or None."""
+
+    BINDINGS = [
+        Binding("escape", "cancel", "Cancel"),
+        Binding("d", "delete", "Delete"),
+    ]
+
+    def __init__(self, sessions: list[tuple[str, str]], current_id: str | None):
+        super().__init__()
+        self.sessions = sessions
+        self.current_id = current_id
+
+    def compose(self) -> ComposeResult:
+        yield Static("[b]Sessions[/b]", id="selector-title")
+        option_list = OptionList(id="selector-list")
+        for session_id, preview in self.sessions:
+            marker = "→ " if session_id == self.current_id else "  "
+            option_list.add_option(Option(f"{marker}{preview}", id=session_id))
+        yield option_list
+
+    def on_mount(self) -> None:
+        self.query_one("#selector-list", OptionList).focus()
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        self.dismiss(("resume", event.option.id))
+
+    def action_delete(self) -> None:
+        option_list = self.query_one("#selector-list", OptionList)
+        if option_list.highlighted is not None:
+            self.dismiss(("delete", self.sessions[option_list.highlighted][0]))
 
     def action_cancel(self) -> None:
         self.dismiss(None)
@@ -126,17 +175,11 @@ class VirtualAgentApp(App):
         self.agent = create_agent(self.current_model, self.thinking_effort)
         self._theme = load_theme(self.theme_name)
 
-        # Load or create conversation
-        current_id, conversations = load_chat_history(HISTORY_FILE)
-        if current_id and current_id in conversations:
-            self.conversation_id = current_id
-            self.history = ModelMessagesTypeAdapter.validate_python(
-                conversations[current_id]["messages"]
-            )
-        else:
-            self.conversation_id = str(uuid.uuid4())
-            self.history = []
+        # Load saved sessions, always start fresh
+        _, conversations = load_chat_history(HISTORY_FILE)
         self.conversations = conversations
+        self.conversation_id = str(uuid.uuid4())
+        self.history = []
 
     def switch_theme(self, name: str) -> str:
         """Switch to a different theme. Returns status message."""
@@ -221,6 +264,62 @@ class VirtualAgentApp(App):
             if level != self.thinking_effort:
                 msg = self.set_thinking(level)
                 self._show_system_message(msg)
+
+    def show_sessions_selector(self) -> None:
+        """Show session history modal."""
+        if not self.conversations:
+            self._show_system_message("No saved sessions")
+            return
+
+        sessions = [
+            (sid, get_session_preview(data["messages"]))
+            for sid, data in self.conversations.items()
+        ]
+        self.push_screen(
+            SessionSelectorScreen(sessions, self.conversation_id),
+            callback=self._on_session_action
+        )
+
+    def _on_session_action(self, result: tuple[str, str] | None) -> None:
+        """Handle session selector result."""
+        if result is None:
+            return
+
+        action, session_id = result
+        if action == "resume":
+            self.call_later(self._load_conversation, session_id)
+        elif action == "delete":
+            self._delete_conversation(session_id)
+
+    async def _load_conversation(self, session_id: str) -> None:
+        """Switch to a different conversation."""
+        if session_id == self.conversation_id:
+            return
+
+        self._persist_conversation()
+
+        self.conversation_id = session_id
+        self.history = ModelMessagesTypeAdapter.validate_python(
+            self.conversations[session_id]["messages"]
+        )
+
+        messages = self.query_one("#messages", VerticalScroll)
+        await messages.remove_children()
+        await self._render_history()
+        self._show_system_message("Resumed session")
+
+    def _delete_conversation(self, session_id: str) -> None:
+        """Delete a conversation from history."""
+        if session_id == self.conversation_id:
+            self._show_system_message("Cannot delete current session")
+            return
+
+        del self.conversations[session_id]
+        save_chat_history(HISTORY_FILE, None, self.conversations)
+        self._show_system_message("Session deleted")
+
+        if self.conversations:
+            self.show_sessions_selector()
 
     def _show_system_message(self, msg: str) -> None:
         """Show a system message in the chat."""
