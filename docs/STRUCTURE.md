@@ -131,8 +131,8 @@ def my_tool(ctx: RunContext[MyDeps], arg: str) -> str:
 ## Running
 
 ```bash
-# CLI mode
-uv run python virtual_agent.py
+# CLI one-shot (scripting, quick queries)
+uv run python virtual_agent.py "search for attention papers"
 
 # TUI mode (interactive terminal interface)
 uv run python tui.py

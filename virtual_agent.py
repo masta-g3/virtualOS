@@ -1,5 +1,6 @@
 import asyncio
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -380,23 +381,19 @@ agent = create_agent()
 
 
 async def main():
-    print("--- Initializing Virtual OS ---")
-    virtual_fs = VirtualFileSystem()
-    virtual_fs.files[f"{VIRTUAL_ROOT}/readme.txt"] = "Welcome to the Matrix."
+    if len(sys.argv) < 2:
+        print("Usage: python virtual_agent.py <prompt>")
+        print("For interactive mode: python tui.py")
+        sys.exit(1)
 
-    deps = AgentDeps(fs=virtual_fs, user_name="Neo")
+    prompt = " ".join(sys.argv[1:])
+    fs = VirtualFileSystem()
+    workspace = Path("./workspace")
+    fs.load_from_disk(workspace)
+    deps = AgentDeps(fs=fs, user_name="user", workspace_path=workspace)
 
-    prompt = "Create a python script that calculates factorial, save it as math_tools.py, then cat it to verify."
-    print(f"User: {prompt}")
-
-    result = await agent.run(prompt, deps=deps, usage_limits=UsageLimits(request_limit=None))
-
-    print("\n--- Agent Response ---")
+    result = await agent.run(prompt, deps=deps)
     print(result.output)
-
-    print("\n--- Virtual Filesystem State ---")
-    for path, content in virtual_fs.files.items():
-        print(f"[{path}]:\n{content}\n")
 
 
 if __name__ == "__main__":

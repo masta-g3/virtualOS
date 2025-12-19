@@ -310,6 +310,7 @@
     "epic": "cli",
     "title": "CLI mode for virtual agent",
     "status": "done",
-    "created_at": "2025-12-18"
+    "created_at": "2025-12-18",
+    "spec_file": "docs/history/20251218_cli-001_oneshot_mode.md"
   }
 ]
