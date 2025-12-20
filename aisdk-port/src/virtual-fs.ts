@@ -1,3 +1,6 @@
+import { readdirSync, readFileSync } from "fs";
+import { join } from "path";
+
 const VIRTUAL_ROOT = "/home/user";
 
 export class VirtualFileSystem {
@@ -87,5 +90,26 @@ export class VirtualFileSystem {
     }
 
     return results.length > 0 ? results.join("\n") : "No matches found.";
+  }
+
+  loadFromDisk(basePath: string): void {
+    const walk = (dir: string) => {
+      let entries;
+      try {
+        entries = readdirSync(join(basePath, dir), { withFileTypes: true });
+      } catch {
+        return; // Directory doesn't exist - no-op (expected on Vercel)
+      }
+      for (const entry of entries) {
+        const relativePath = dir ? `${dir}/${entry.name}` : entry.name;
+        if (entry.isDirectory()) {
+          walk(relativePath);
+        } else {
+          const content = readFileSync(join(basePath, relativePath), "utf-8");
+          this.files.set(`${VIRTUAL_ROOT}/${relativePath}`, content);
+        }
+      }
+    };
+    walk("");
   }
 }

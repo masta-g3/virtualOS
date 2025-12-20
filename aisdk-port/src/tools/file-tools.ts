@@ -5,7 +5,7 @@ import { VirtualFileSystem } from "../virtual-fs.js";
 export function createFileTools(fs: VirtualFileSystem) {
   const writeFile = tool({
     description: "Write content to a file (creates or overwrites).",
-    parameters: z.object({
+    inputSchema: z.object({
       path: z.string().describe("File path (relative to cwd or absolute)"),
       content: z.string().describe("Complete file content"),
     }),
@@ -14,7 +14,7 @@ export function createFileTools(fs: VirtualFileSystem) {
 
   const readFile = tool({
     description: "Read contents of a file.",
-    parameters: z.object({
+    inputSchema: z.object({
       path: z.string().describe("File path (relative to cwd or absolute)"),
     }),
     execute: async ({ path }) => fs.read(path),
@@ -23,7 +23,7 @@ export function createFileTools(fs: VirtualFileSystem) {
   const runShell = tool({
     description:
       "Execute a shell command. Supported: ls, rm, pwd, cd, grep <pattern> [path].",
-    parameters: z.object({
+    inputSchema: z.object({
       command: z.string().describe("Shell command to execute"),
     }),
     execute: async ({ command }) => {

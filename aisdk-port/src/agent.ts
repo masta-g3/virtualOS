@@ -1,8 +1,8 @@
-import { generateText } from "ai";
-import { openai } from "@ai-sdk/openai";
+import { generateText, stepCountIs } from "ai";
 import { VirtualFileSystem } from "./virtual-fs.js";
 import { createFileTools } from "./tools/file-tools.js";
 import { createResearchTools } from "./tools/research-tools.js";
+import { createModel, ModelKey, ThinkingEffort } from "./models.js";
 
 const SYSTEM_PROMPT = `\
 You are a research assistant with access to the LLMpedia arXiv paper database.
@@ -49,15 +49,34 @@ Maintain /home/user/scratchpad.md to accumulate findings:
 - write_file to save updates
 `;
 
+export interface AgentOptions {
+  modelKey?: ModelKey;
+  thinkingEffort?: ThinkingEffort;
+  fs?: VirtualFileSystem;
+}
+
+export interface ToolCall {
+  name: string;
+  args: Record<string, unknown>;
+  result: string;
+}
+
 export interface AgentResult {
   text: string;
   steps: number;
-  files: Map<string, string>;
+  files: Record<string, string>;
+  toolCalls: ToolCall[];
+  reasoning?: string;
 }
 
-export async function runAgent(prompt: string): Promise<AgentResult> {
-  const model = openai.responses("gpt-5.1-codex-mini");
-  const fs = new VirtualFileSystem();
+export async function runAgent(
+  prompt: string,
+  options: AgentOptions = {}
+): Promise<AgentResult> {
+  const { modelKey = "openai", thinkingEffort = "high", fs: providedFs } = options;
+  const { model, providerOptions, maxTokens } = createModel(modelKey, thinkingEffort);
+
+  const fs = providedFs ?? new VirtualFileSystem();
   const { writeFile, readFile, runShell } = createFileTools(fs);
   const { searchArxiv, getPaperSummaries, fetchPaper } = createResearchTools(fs);
 
@@ -66,12 +85,40 @@ export async function runAgent(prompt: string): Promise<AgentResult> {
     system: SYSTEM_PROMPT,
     prompt,
     tools: { writeFile, readFile, runShell, searchArxiv, getPaperSummaries, fetchPaper },
-    maxSteps: 50,
+    stopWhen: stepCountIs(50),
+    ...(providerOptions && { providerOptions }),
+    ...(maxTokens && { maxTokens }),
   });
+
+  const toolCalls: ToolCall[] = [];
+  for (const step of result.steps) {
+    if (step.toolCalls) {
+      for (const tc of step.toolCalls) {
+        const toolResult = step.toolResults?.find(
+          (r) => r.toolCallId === tc.toolCallId
+        );
+        toolCalls.push({
+          name: tc.toolName,
+          args: tc.input as Record<string, unknown>,
+          result: String(toolResult?.output ?? ""),
+        });
+      }
+    }
+  }
+
+  // Extract reasoning from steps (for extended thinking models)
+  let reasoning: string | undefined;
+  for (const step of result.steps) {
+    if (step.reasoning) {
+      reasoning = (reasoning ? reasoning + "\n\n" : "") + step.reasoning.map(r => r.text).join("\n");
+    }
+  }
 
   return {
     text: result.text,
     steps: result.steps.length,
-    files: fs.files,
+    files: Object.fromEntries(fs.files),
+    toolCalls,
+    reasoning,
   };
 }

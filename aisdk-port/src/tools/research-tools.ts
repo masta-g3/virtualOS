@@ -12,15 +12,12 @@ export function createResearchTools(fs: VirtualFileSystem) {
     description: `Search arXiv papers in LLMpedia database.
 Use semantic query for conceptual search, or filters for specific criteria.
 Returns: arxiv_code, title, authors, published date, abstract snippet.`,
-    parameters: z.object({
-      query: z.string().optional().describe("Semantic search query"),
-      title_contains: z
-        .string()
-        .optional()
-        .describe("Substring match in title"),
-      author: z.string().optional().describe("Author name substring"),
-      published_after: z.string().optional().describe("ISO date YYYY-MM-DD"),
-      published_before: z.string().optional().describe("ISO date YYYY-MM-DD"),
+    inputSchema: z.object({
+      query: z.string().describe("Semantic search query (required)"),
+      title_contains: z.string().default("").describe("Substring match in title"),
+      author: z.string().default("").describe("Author name substring"),
+      published_after: z.string().default("").describe("ISO date YYYY-MM-DD"),
+      published_before: z.string().default("").describe("ISO date YYYY-MM-DD"),
       limit: z.number().default(10).describe("Max results (default 10)"),
     }),
     execute: async (params) => {
@@ -38,7 +35,7 @@ Returns: arxiv_code, title, authors, published date, abstract snippet.`,
   const getPaperSummaries = tool({
     description: `Get summaries for papers at specified detail level.
 Resolutions: low (~500 tokens), medium (~1000), high (~2500).`,
-    parameters: z.object({
+    inputSchema: z.object({
       arxiv_codes: z.array(z.string()).describe("List of arxiv codes"),
       resolution: z.enum(["low", "medium", "high"]).default("medium"),
     }),
@@ -54,7 +51,7 @@ Resolutions: low (~500 tokens), medium (~1000), high (~2500).`,
 
   const fetchPaper = tool({
     description: `Download full paper markdown to /home/user/papers/{arxiv_code}.md`,
-    parameters: z.object({
+    inputSchema: z.object({
       arxiv_code: z.string().describe("ArXiv paper code"),
     }),
     execute: async ({ arxiv_code }) => {

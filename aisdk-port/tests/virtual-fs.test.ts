@@ -171,4 +171,11 @@ describe("VirtualFileSystem", () => {
       expect(result).toContain("/home/user");
     });
   });
+
+  describe("loadFromDisk", () => {
+    it("handles non-existent directory gracefully", () => {
+      fs.loadFromDisk("/nonexistent/path");
+      expect(fs.files.size).toBe(0);
+    });
+  });
 });
