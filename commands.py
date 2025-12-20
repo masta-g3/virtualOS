@@ -53,11 +53,14 @@ async def cmd_help(app: "VirtualAgentApp", args: str) -> str:
         lines.append(f"- `{usage}` — {info.help}")
     lines.extend([
         "",
+        "**Input:** Enter sends. Use Ctrl+E for multi-line (opens $EDITOR).",
+        "",
         "**Keyboard shortcuts:**",
         "- `Ctrl+C` — Quit",
+        "- `Ctrl+E` — Open $EDITOR (multi-line mode, Ctrl+J to send)",
         "- `Ctrl+L` — Clear (new session)",
         "- `Ctrl+S` — Save workspace",
-        "- `Ctrl+Y` — Copy mode",
+        "- `Ctrl+Y` — Copy mode (1-9 to select block)",
     ])
     return "\n".join(lines)
 

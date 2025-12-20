@@ -119,7 +119,7 @@ Screen {{
     margin: 0 0 1 0;
 }}
 
-Input#prompt {{
+Input#prompt-single {{
     dock: bottom;
     height: 3;
     margin: 0 1 1 1;
@@ -128,8 +128,35 @@ Input#prompt {{
     padding: 0 1;
 }}
 
-Input#prompt:focus {{
+Input#prompt-single:focus {{
     border: tall {c["accent"]};
+}}
+
+TextArea#prompt-multi {{
+    dock: bottom;
+    height: auto;
+    min-height: 3;
+    max-height: 8;
+    margin: 0 1 1 1;
+    background: {c["bg_surface"]};
+    border: tall {c["chrome"]};
+    padding: 0 1;
+}}
+
+TextArea#prompt-multi:focus {{
+    border: tall {c["accent"]};
+}}
+
+TextArea#prompt-multi .text-area--cursor {{
+    background: {c["accent"]};
+}}
+
+TextArea#prompt-multi .text-area--placeholder {{
+    color: {c["text_muted"]};
+}}
+
+.hidden {{
+    display: none;
 }}
 
 SelectorScreen {{

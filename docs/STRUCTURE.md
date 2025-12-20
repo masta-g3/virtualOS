@@ -150,7 +150,10 @@ The TUI loads files from `./workspace/` into the virtual filesystem on startup:
 
 | Key | Action |
 |-----|--------|
+| Enter | Send message (single-line mode) |
 | Ctrl+C | Quit |
+| Ctrl+E | Open $EDITOR for multi-line input |
+| Ctrl+J | Send message (multi-line mode) |
 | Ctrl+L | Clear (new session) |
 | Ctrl+S | Save workspace |
 | Ctrl+Y | Copy mode (select block to copy) |

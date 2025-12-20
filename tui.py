@@ -1,6 +1,8 @@
 import json
+import os
 import subprocess
 import sys
+import tempfile
 import uuid
 from pathlib import Path
 
@@ -11,7 +13,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, VerticalScroll
 from textual.events import Key
 from textual.screen import ModalScreen
-from textual.widgets import Input, Markdown, OptionList, Static
+from textual.widgets import Input, Markdown, OptionList, Static, TextArea
 from textual.widgets.option_list import Option
 
 from commands import dispatch
@@ -39,6 +41,20 @@ def _copy_to_clipboard(text: str) -> bool:
         return True
     except (subprocess.CalledProcessError, FileNotFoundError):
         return False
+
+
+def _open_external_editor(initial: str = "") -> str:
+    """Open $EDITOR for multi-line input. Returns edited content."""
+    editor = os.environ.get("EDITOR", "vi")
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
+        f.write(initial)
+        path = f.name
+    try:
+        subprocess.call([editor, path])
+        with open(path) as f:
+            return f.read().strip()
+    finally:
+        os.unlink(path)
 
 
 def format_tool_args(args) -> str:
@@ -171,6 +187,8 @@ class VirtualAgentApp(App):
 
     BINDINGS = [
         Binding("ctrl+c", "quit", "Quit"),
+        Binding("ctrl+e", "edit", "Editor", priority=True),
+        Binding("ctrl+j", "submit", "Send", priority=True),
         Binding("ctrl+l", "clear", "Clear"),
         Binding("ctrl+s", "save", "Save"),
         Binding("ctrl+y", "toggle_copy_mode", "Copy"),
@@ -209,6 +227,9 @@ class VirtualAgentApp(App):
         # Copy mode state
         self.copy_mode = False
         self._copy_targets: list = []
+
+        # Multi-line input mode (after Ctrl+E with newlines)
+        self.multiline_mode = False
 
     def switch_theme(self, name: str) -> str:
         """Switch to a different theme. Returns status message."""
@@ -361,7 +382,8 @@ class VirtualAgentApp(App):
             yield Static("Virtual OS", id="header-title")
             yield Static("", id="header-status")
         yield VerticalScroll(id="messages")
-        yield Input(placeholder="Type a message...", id="prompt")
+        yield Input(placeholder="Type a message...", id="prompt-single")
+        yield TextArea(id="prompt-multi", soft_wrap=True, classes="hidden")
 
     async def on_mount(self) -> None:
         # Apply theme CSS (css property isn't auto-loaded)
@@ -369,7 +391,8 @@ class VirtualAgentApp(App):
         self.stylesheet.reparse()
         self.stylesheet.update(self)
 
-        self.query_one("#prompt", Input).focus()
+        self.query_one("#prompt-multi", TextArea).placeholder = "Ctrl+J to send..."
+        self.query_one("#prompt-single", Input).focus()
         if self.history:
             await self._render_history()
 
@@ -407,13 +430,45 @@ class VirtualAgentApp(App):
         container.scroll_end()
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Handle Enter in single-line input mode."""
         prompt = event.value.strip()
-        if not prompt:
+        if prompt:
+            self.query_one("#prompt-single", Input).value = ""
+            await self._submit_prompt(prompt)
+
+    async def action_submit(self) -> None:
+        """Handle Ctrl+J in multi-line input mode."""
+        if not self.multiline_mode:
             return
+        textarea = self.query_one("#prompt-multi", TextArea)
+        prompt = textarea.text.strip()
+        if prompt:
+            textarea.text = ""
+            self._switch_to_single_line()
+            await self._submit_prompt(prompt)
 
-        input_widget = self.query_one("#prompt", Input)
-        input_widget.value = ""
+    def _switch_to_multiline(self, content: str) -> None:
+        """Switch to multi-line TextArea mode."""
+        self.multiline_mode = True
+        self.query_one("#prompt-single", Input).add_class("hidden")
+        textarea = self.query_one("#prompt-multi", TextArea)
+        textarea.remove_class("hidden")
+        textarea.border_subtitle = "Ctrl+J to send"
+        textarea.text = content
+        textarea.focus()
 
+    def _switch_to_single_line(self) -> None:
+        """Switch back to single-line Input mode."""
+        self.multiline_mode = False
+        textarea = self.query_one("#prompt-multi", TextArea)
+        textarea.add_class("hidden")
+        textarea.border_subtitle = ""
+        input_widget = self.query_one("#prompt-single", Input)
+        input_widget.remove_class("hidden")
+        input_widget.focus()
+
+    async def _submit_prompt(self, prompt: str) -> None:
+        """Shared submission logic for both input modes."""
         messages = self.query_one("#messages", VerticalScroll)
 
         if prompt.startswith("/"):
@@ -421,10 +476,13 @@ class VirtualAgentApp(App):
             if result:
                 await messages.mount(Markdown(result, classes="agent-message"))
                 messages.scroll_end()
-            input_widget.focus()
             return
 
-        input_widget.disabled = True
+        # Disable current input
+        if self.multiline_mode:
+            self.query_one("#prompt-multi", TextArea).disabled = True
+        else:
+            self.query_one("#prompt-single", Input).disabled = True
 
         accent = self._theme.colors["accent"]
         user_msg = Static(f"[{accent}]┃[/] {prompt}", classes="user-message")
@@ -443,8 +501,13 @@ class VirtualAgentApp(App):
         finally:
             self._set_thinking(False)
 
-        input_widget.disabled = False
-        input_widget.focus()
+        # Re-enable current input
+        if self.multiline_mode:
+            self.query_one("#prompt-multi", TextArea).disabled = False
+            self.query_one("#prompt-multi", TextArea).focus()
+        else:
+            self.query_one("#prompt-single", Input).disabled = False
+            self.query_one("#prompt-single", Input).focus()
 
     async def _run_agent(
         self,
@@ -537,6 +600,32 @@ class VirtualAgentApp(App):
         await messages.mount(confirm)
         messages.scroll_end()
 
+    def action_edit(self) -> None:
+        """Open external editor for multi-line input."""
+        if self.multiline_mode:
+            initial = self.query_one("#prompt-multi", TextArea).text
+        else:
+            initial = self.query_one("#prompt-single", Input).value
+
+        with self.suspend():
+            content = _open_external_editor(initial)
+
+        if not content:
+            # Cancelled or empty - refocus current input
+            if self.multiline_mode:
+                self.query_one("#prompt-multi", TextArea).focus()
+            else:
+                self.query_one("#prompt-single", Input).focus()
+            return
+
+        if "\n" in content:
+            # Multi-line content - switch to TextArea mode
+            self._switch_to_multiline(content)
+        else:
+            # Single-line content - stay in Input mode
+            self._switch_to_single_line()
+            self.query_one("#prompt-single", Input).value = content
+
     def action_toggle_copy_mode(self) -> None:
         """Toggle copy mode on/off."""
         if self.copy_mode:
@@ -556,7 +645,10 @@ class VirtualAgentApp(App):
             return
 
         self.copy_mode = True
-        self.query_one("#prompt", Input).disabled = True
+        if self.multiline_mode:
+            self.query_one("#prompt-multi", TextArea).disabled = True
+        else:
+            self.query_one("#prompt-single", Input).disabled = True
 
         for i, widget in enumerate(self._copy_targets, 1):
             widget.add_class("copy-target")
@@ -573,9 +665,12 @@ class VirtualAgentApp(App):
         self._copy_targets = []
         self.copy_mode = False
 
-        input_widget = self.query_one("#prompt", Input)
-        input_widget.disabled = False
-        input_widget.focus()
+        if self.multiline_mode:
+            self.query_one("#prompt-multi", TextArea).disabled = False
+            self.query_one("#prompt-multi", TextArea).focus()
+        else:
+            self.query_one("#prompt-single", Input).disabled = False
+            self.query_one("#prompt-single", Input).focus()
 
         self._update_header()
 
