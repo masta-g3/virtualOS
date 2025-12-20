@@ -271,6 +271,7 @@ class VirtualAgentApp(App):
         self.current_model = model_key
         self.agent = create_agent(model_key, self.thinking_effort)
         settings.set("model", model_key)
+        self._update_header_title()
         return f"Switched to {model_key}"
 
     def set_thinking(self, level: ThinkingEffort) -> str:
@@ -391,6 +392,7 @@ class VirtualAgentApp(App):
         self.stylesheet.reparse()
         self.stylesheet.update(self)
 
+        self._update_header_title()
         self.query_one("#prompt-multi", TextArea).placeholder = "Ctrl+J to send..."
         self.query_one("#prompt-single", Input).focus()
         if self.history:
@@ -564,7 +566,7 @@ class VirtualAgentApp(App):
 
     def _animate_thinking(self) -> None:
         """Cycle through thinking animation frames."""
-        frames = ["◐", "◓", "◑", "◒"]
+        frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
         status = self.query_one("#header-status", Static)
         dot = frames[self._thinking_frame % len(frames)]
         accent = self._theme.colors["accent"]
@@ -580,6 +582,12 @@ class VirtualAgentApp(App):
             status.update("[modified]")
         else:
             status.update("")
+
+    def _update_header_title(self) -> None:
+        """Update header title with current model."""
+        title = self.query_one("#header-title", Static)
+        muted = self._theme.colors["text_muted"]
+        title.update(f"Virtual OS [{muted}]•[/] {self.current_model}")
 
     def _check_modified(self) -> None:
         """Check if filesystem differs from snapshot."""
