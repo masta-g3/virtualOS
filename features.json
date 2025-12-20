@@ -377,13 +377,13 @@
       "Export createAgent function with model/thinking params",
       "Verify: switch models via parameter, confirm responses work with each provider"
     ],
-    "status": "in_progress",
+    "status": "done",
     "priority": 2,
     "depends_on": [
       "port-001"
     ],
     "discovered_from": null,
-    "spec_file": null,
+    "spec_file": "docs/history/20251219_port-004_multi_model.md",
     "created_at": "2025-12-18"
   },
   {
@@ -433,7 +433,7 @@
     "priority": 2,
     "depends_on": [],
     "discovered_from": "port-005",
-    "spec_file": "docs/history/port-004.1.md",
+    "spec_file": "docs/history/20251219_port-004.1_sdk_compat.md",
     "created_at": "2025-12-19"
   }
 ]
