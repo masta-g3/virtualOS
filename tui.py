@@ -1,4 +1,6 @@
 import json
+import subprocess
+import sys
 import uuid
 from pathlib import Path
 
@@ -7,6 +9,7 @@ from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, ToolCall
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, VerticalScroll
+from textual.events import Key
 from textual.screen import ModalScreen
 from textual.widgets import Input, Markdown, OptionList, Static
 from textual.widgets.option_list import Option
@@ -18,6 +21,24 @@ from virtual_agent import VirtualFileSystem, AgentDeps, create_agent, MODELS, Th
 
 WORKSPACE_PATH = Path("./workspace")
 HISTORY_FILE = WORKSPACE_PATH / ".chat_history.json"
+
+
+def _copy_to_clipboard(text: str) -> bool:
+    """Copy text to system clipboard. Returns success status."""
+    if sys.platform == "darwin":
+        cmd = ["pbcopy"]
+    elif sys.platform == "linux":
+        cmd = ["xclip", "-selection", "clipboard"]
+    elif sys.platform == "win32":
+        cmd = ["clip"]
+    else:
+        return False
+
+    try:
+        subprocess.run(cmd, input=text.encode(), check=True)
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return False
 
 
 def format_tool_args(args) -> str:
@@ -50,13 +71,16 @@ def save_chat_history(path: Path, current_id: str, conversations: dict) -> None:
     path.write_text(json.dumps({"current": current_id, "conversations": conversations}))
 
 
-def format_tool_result(content: str) -> list[Static]:
-    """Format tool result content into prefixed Static widgets."""
+def format_tool_result(content: str) -> Static:
+    """Format tool result as single multi-line widget."""
     lines = str(content).split("\n")
-    return [
-        Static(f"{'│ └─ ' if i == 0 else '│    '}{line}", classes="tool-result", markup=False)
+    formatted = "\n".join(
+        f"{'│ └─ ' if i == 0 else '│    '}{line}"
         for i, line in enumerate(lines)
-    ]
+    )
+    widget = Static(formatted, classes="tool-result", markup=False)
+    widget.copyable_content = content
+    return widget
 
 
 def format_tool_call(part: ToolCallPart) -> Static:
@@ -149,6 +173,7 @@ class VirtualAgentApp(App):
         Binding("ctrl+c", "quit", "Quit"),
         Binding("ctrl+l", "clear", "Clear"),
         Binding("ctrl+s", "save", "Save"),
+        Binding("ctrl+y", "toggle_copy_mode", "Copy"),
     ]
 
     def __init__(self):
@@ -180,6 +205,10 @@ class VirtualAgentApp(App):
         self.conversations = conversations
         self.conversation_id = str(uuid.uuid4())
         self.history = []
+
+        # Copy mode state
+        self.copy_mode = False
+        self._copy_targets: list = []
 
     def switch_theme(self, name: str) -> str:
         """Switch to a different theme. Returns status message."""
@@ -366,15 +395,15 @@ class VirtualAgentApp(App):
                         accent = self._theme.colors["accent"]
                         await container.mount(Static(f"[{accent}]┃[/] {part.content}", classes="user-message"))
                     elif isinstance(part, ToolReturnPart):
-                        for widget in format_tool_result(part.content):
-                            await container.mount(widget)
+                        await container.mount(format_tool_result(part.content))
             elif isinstance(msg, ModelResponse):
                 for part in msg.parts:
                     if isinstance(part, ToolCallPart):
                         await container.mount(format_tool_call(part))
                     elif isinstance(part, TextPart):
-                        await container.mount(Markdown(f"╰ {part.content}", classes="agent-message"))
-                        await container.mount(Static("", classes="turn-separator"))
+                        widget = Markdown(f"╰ {part.content}", classes="agent-message")
+                        widget.copyable_content = part.content
+                        await container.mount(widget)
         container.scroll_end()
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
@@ -439,12 +468,11 @@ class VirtualAgentApp(App):
                 elif isinstance(node, ModelRequestNode):
                     for part in node.request.parts:
                         if isinstance(part, ToolReturnPart):
-                            for widget in format_tool_result(part.content):
-                                await container.mount(widget, before=response_widget)
+                            await container.mount(format_tool_result(part.content), before=response_widget)
                             container.scroll_end()
 
             response_widget.update(f"╰ {run.result.output}")
-            await container.mount(Static("", classes="turn-separator"))
+            response_widget.copyable_content = run.result.output
             container.scroll_end()
             self.history = run.result.all_messages()
         self._check_modified()
@@ -508,6 +536,81 @@ class VirtualAgentApp(App):
         confirm = Static(f"[Saved {count} files to {self.workspace_path}/]", classes="system-message")
         await messages.mount(confirm)
         messages.scroll_end()
+
+    def action_toggle_copy_mode(self) -> None:
+        """Toggle copy mode on/off."""
+        if self.copy_mode:
+            self._exit_copy_mode()
+        else:
+            self._enter_copy_mode()
+
+    def _enter_copy_mode(self) -> None:
+        """Activate copy mode, highlight copyable blocks."""
+        container = self.query_one("#messages", VerticalScroll)
+        candidates = list(container.query(".tool-result, .agent-message"))
+
+        self._copy_targets = [w for w in candidates if hasattr(w, "copyable_content")][-9:]
+
+        if not self._copy_targets:
+            self._flash_status("No copyable blocks")
+            return
+
+        self.copy_mode = True
+        self.query_one("#prompt", Input).disabled = True
+
+        for i, widget in enumerate(self._copy_targets, 1):
+            widget.add_class("copy-target")
+            widget.border_subtitle = f"[{i}]"
+
+        count = len(self._copy_targets)
+        self._update_status(f"[1-{count}] Copy  ESC Cancel")
+
+    def _exit_copy_mode(self) -> None:
+        """Deactivate copy mode, remove highlights."""
+        for widget in self._copy_targets:
+            widget.remove_class("copy-target")
+            widget.border_subtitle = ""
+        self._copy_targets = []
+        self.copy_mode = False
+
+        input_widget = self.query_one("#prompt", Input)
+        input_widget.disabled = False
+        input_widget.focus()
+
+        self._update_header()
+
+    def on_key(self, event: Key) -> None:
+        """Handle keys in copy mode."""
+        if not self.copy_mode:
+            return
+
+        if event.key == "escape":
+            self._exit_copy_mode()
+            event.stop()
+        elif event.key.isdigit() and event.key != "0":
+            self._copy_block(int(event.key))
+            event.stop()
+
+    def _copy_block(self, index: int) -> None:
+        """Copy block at 1-based index."""
+        if 1 <= index <= len(self._copy_targets):
+            widget = self._copy_targets[index - 1]
+            content = widget.copyable_content
+            if _copy_to_clipboard(content):
+                self._flash_status("Copied")
+            else:
+                self._flash_status("Clipboard unavailable")
+        self._exit_copy_mode()
+
+    def _update_status(self, text: str) -> None:
+        """Update header status text."""
+        status = self.query_one("#header-status", Static)
+        status.update(text)
+
+    def _flash_status(self, text: str, duration: float = 1.5) -> None:
+        """Show temporary status message, then restore."""
+        self._update_status(f"[{text}]")
+        self.set_timer(duration, self._update_header)
 
 
 def main():

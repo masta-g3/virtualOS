@@ -146,6 +146,15 @@ The TUI loads files from `./workspace/` into the virtual filesystem on startup:
 - Press `ctrl+s` to save changes back to `./workspace/`
 - Header shows `[modified]` when unsaved changes exist
 
+## Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| Ctrl+C | Quit |
+| Ctrl+L | Clear (new session) |
+| Ctrl+S | Save workspace |
+| Ctrl+Y | Copy mode (select block to copy) |
+
 ## Model Configuration
 
 The agent supports multiple LLM providers with unified thinking effort control:

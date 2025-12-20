@@ -51,6 +51,14 @@ async def cmd_help(app: "VirtualAgentApp", args: str) -> str:
     for name, info in sorted(REGISTRY.items()):
         usage = info.usage or f"/{name}"
         lines.append(f"- `{usage}` — {info.help}")
+    lines.extend([
+        "",
+        "**Keyboard shortcuts:**",
+        "- `Ctrl+C` — Quit",
+        "- `Ctrl+L` — Clear (new session)",
+        "- `Ctrl+S` — Save workspace",
+        "- `Ctrl+Y` — Copy mode",
+    ])
     return "\n".join(lines)
 
 

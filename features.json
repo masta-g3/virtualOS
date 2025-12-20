@@ -435,5 +435,12 @@
     "discovered_from": "port-005",
     "spec_file": "docs/history/20251219_port-004.1_sdk_compat.md",
     "created_at": "2025-12-19"
+  },
+  {
+    "id": "tui-010",
+    "title": "Copy functionality for tool outputs and agent responses",
+    "status": "done",
+    "created_at": "2025-12-19",
+    "spec_file": "docs/history/20251219_tui-010_copy_mode.md"
   }
 ]

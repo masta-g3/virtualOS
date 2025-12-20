@@ -93,18 +93,9 @@ Screen {{
     margin: 0 0 1 0;
 }}
 
-.user-prefix {{
-    color: {c["accent"]};
-    width: 2;
-}}
-
-.user-text {{
-    color: {c["text_primary"]};
-}}
-
 .agent-message {{
     color: {c["text_secondary"]};
-    margin: 0 0 1 0;
+    margin: 0 0 2 0;
     padding: 0;
 }}
 
@@ -116,11 +107,6 @@ Screen {{
 .tool-result {{
     color: {c["tool_result"]};
     margin: 0;
-}}
-
-.turn-separator {{
-    height: 1;
-    margin: 0 0 1 0;
 }}
 
 .error-message {{
@@ -174,5 +160,9 @@ SelectorScreen {{
 #selector-list > .option-list--option-highlighted {{
     background: {c["bg_primary"]};
     color: {c["accent"]};
+}}
+
+.copy-target {{
+    border: round {c["accent"]};
 }}
 '''
