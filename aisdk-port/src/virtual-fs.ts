@@ -74,22 +74,47 @@ export class VirtualFileSystem {
     return `Changed directory to ${this.cwd}`;
   }
 
-  grep(pattern: string, path?: string): string {
+  grep(pattern: string, path?: string, before = 0, after = 0): string {
     const regex = new RegExp(pattern);
+    const target = path ? this.resolve(path) : this.cwd;
     const results: string[] = [];
-    const targetDir = path ? this.resolve(path) : this.cwd;
 
     for (const [filePath, content] of this.files.entries()) {
-      if (!filePath.startsWith(targetDir)) continue;
+      if (filePath.endsWith("/.dir")) continue;
+      if (!filePath.startsWith(target)) continue;
+      if (this.files.has(target) && filePath !== target) continue;
+
       const lines = content.split("\n");
+      const matchedRanges = new Map<number, boolean>(); // idx -> isMatch
+
+      // Find matches and their context ranges
       for (let i = 0; i < lines.length; i++) {
         if (regex.test(lines[i])) {
-          results.push(`${filePath}:${i + 1}:${lines[i]}`);
+          const start = Math.max(0, i - before);
+          const end = Math.min(lines.length, i + after + 1);
+          for (let j = start; j < end; j++) {
+            if (!matchedRanges.has(j)) matchedRanges.set(j, j === i);
+            else if (j === i) matchedRanges.set(j, true);
+          }
         }
+      }
+
+      // Output in order with separators
+      let prevIdx = -2;
+      const sortedIndices = [...matchedRanges.keys()].sort((a, b) => a - b);
+      for (const idx of sortedIndices) {
+        if (idx > prevIdx + 1 && prevIdx >= 0) results.push("--");
+        const marker = matchedRanges.get(idx) ? ":" : "-";
+        results.push(`${filePath}:${idx + 1}${marker}${lines[idx]}`);
+        prevIdx = idx;
       }
     }
 
-    return results.length > 0 ? results.join("\n") : "No matches found.";
+    if (results.length === 0) return "No matches found.";
+    if (results.length > 100) {
+      return `Found ${results.length} lines (showing first 100):\n${results.slice(0, 100).join("\n")}`;
+    }
+    return results.join("\n");
   }
 
   loadFromDisk(basePath: string): void {

@@ -149,6 +149,35 @@ describe("VirtualFileSystem", () => {
       expect(result).toContain("test.txt:2:bar456");
       expect(result).not.toContain("baz");
     });
+
+    it("shows context lines with before and after", () => {
+      fs.files.set(`${VIRTUAL_ROOT}/code.py`, "line1\nline2\nmatch\nline4\nline5");
+      const result = fs.grep("match", undefined, 1, 1);
+      expect(result).toContain("code.py:2-line2");
+      expect(result).toContain("code.py:3:match");
+      expect(result).toContain("code.py:4-line4");
+    });
+
+    it("separates non-adjacent context groups", () => {
+      fs.files.set(`${VIRTUAL_ROOT}/test.txt`, "a\nmatch1\nb\nc\nd\nmatch2\ne");
+      const result = fs.grep("match", undefined, 0, 1);
+      expect(result).toContain("--");
+    });
+
+    it("skips .dir markers", () => {
+      fs.files.set(`${VIRTUAL_ROOT}/subdir/.dir`, "");
+      fs.files.set(`${VIRTUAL_ROOT}/test.txt`, "content");
+      const result = fs.grep("content");
+      expect(result).not.toContain(".dir");
+    });
+
+    it("searches specific file only", () => {
+      fs.files.set(`${VIRTUAL_ROOT}/a.txt`, "match");
+      fs.files.set(`${VIRTUAL_ROOT}/b.txt`, "match");
+      const result = fs.grep("match", `${VIRTUAL_ROOT}/a.txt`);
+      expect(result).toContain("a.txt");
+      expect(result).not.toContain("b.txt");
+    });
   });
 
   describe("edge cases", () => {

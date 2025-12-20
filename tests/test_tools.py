@@ -106,3 +106,84 @@ class TestRunShell:
 
         call_args = mock_run.call_args
         assert call_args[0][0][1] == "script.py"
+
+
+class TestGrepCommand:
+    """Tests for grep command in run_shell."""
+
+    def test_grep_finds_matches(self, mock_ctx):
+        """Grep returns matching lines with file:line:content format."""
+        mock_ctx.deps.fs.write("test.py", "def foo():\n    return 42\ndef bar():\n    pass")
+        result = run_shell(mock_ctx, "grep def")
+        assert "test.py:1:def foo():" in result
+        assert "test.py:3:def bar():" in result
+
+    def test_grep_no_matches(self, mock_ctx):
+        """Grep returns message when no matches found."""
+        mock_ctx.deps.fs.write("test.txt", "hello world")
+        result = run_shell(mock_ctx, "grep xyz")
+        assert result == "No matches found."
+
+    def test_grep_specific_file(self, mock_ctx):
+        """Grep can search a specific file."""
+        mock_ctx.deps.fs.write("a.txt", "match")
+        mock_ctx.deps.fs.write("b.txt", "match")
+        result = run_shell(mock_ctx, "grep match a.txt")
+        assert "a.txt" in result
+        assert "b.txt" not in result
+
+    def test_grep_regex(self, mock_ctx):
+        """Grep supports regex patterns."""
+        mock_ctx.deps.fs.write("test.txt", "foo123\nbar456\nbaz")
+        result = run_shell(mock_ctx, r"grep \d+")
+        assert "test.txt:1:foo123" in result
+        assert "test.txt:2:bar456" in result
+        assert "baz" not in result
+
+    def test_grep_context_after(self, mock_ctx):
+        """Grep -A shows lines after match."""
+        mock_ctx.deps.fs.write("test.txt", "a\nmatch\nb\nc")
+        result = run_shell(mock_ctx, "grep -A 2 match")
+        assert "test.txt:2:match" in result
+        assert "test.txt:3-b" in result
+        assert "test.txt:4-c" in result
+
+    def test_grep_context_before(self, mock_ctx):
+        """Grep -B shows lines before match."""
+        mock_ctx.deps.fs.write("test.txt", "a\nb\nmatch\nc")
+        result = run_shell(mock_ctx, "grep -B 2 match")
+        assert "test.txt:1-a" in result
+        assert "test.txt:2-b" in result
+        assert "test.txt:3:match" in result
+
+    def test_grep_context_separator(self, mock_ctx):
+        """Grep separates non-adjacent match groups with --."""
+        mock_ctx.deps.fs.write("test.txt", "match1\na\nb\nc\nmatch2")
+        result = run_shell(mock_ctx, "grep match")
+        assert "--" in result
+
+    def test_grep_truncates_large_output(self, mock_ctx):
+        """Grep truncates output at 100 lines."""
+        content = "\n".join([f"match line {i}" for i in range(150)])
+        mock_ctx.deps.fs.write("big.txt", content)
+        result = run_shell(mock_ctx, "grep match")
+        assert "showing first 100" in result
+
+    def test_grep_invalid_regex(self, mock_ctx):
+        """Grep returns error for invalid regex."""
+        mock_ctx.deps.fs.write("test.txt", "content")
+        result = run_shell(mock_ctx, "grep [invalid")
+        assert "Error" in result
+        assert "Invalid regex" in result
+
+    def test_grep_usage_no_pattern(self, mock_ctx):
+        """Grep shows usage when no pattern provided."""
+        result = run_shell(mock_ctx, "grep")
+        assert "Usage" in result
+
+    def test_grep_skips_dir_markers(self, mock_ctx):
+        """Grep skips .dir directory markers."""
+        mock_ctx.deps.fs.files[f"{VIRTUAL_ROOT}/subdir/.dir"] = ""
+        mock_ctx.deps.fs.write("test.txt", "content")
+        result = run_shell(mock_ctx, "grep content")
+        assert ".dir" not in result

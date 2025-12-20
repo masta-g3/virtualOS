@@ -75,7 +75,7 @@ A PydanticAI agent operating in a sandboxed environment:
 |------|---------|------------|
 | `write_file` | Create/overwrite files | `path`, `content` |
 | `read_file` | Read file contents | `path` |
-| `run_shell` | Shell commands | `command` (ls, rm, pwd, cd, mkdir, touch, mv, python) |
+| `run_shell` | Shell commands | `command` (ls, rm, pwd, cd, mkdir, touch, mv, grep, python) |
 
 **Research Tools:**
 

@@ -217,7 +217,8 @@ def read_file(ctx: RunContext[AgentDeps], path: str) -> str:
 def run_shell(ctx: RunContext[AgentDeps], command: str) -> str:
     """
     Execute a shell command. Use write_file/read_file for file operations.
-    Supported: ls, rm, pwd, cd, mkdir, touch, mv, python.
+    Supported: ls, rm, pwd, cd, mkdir, touch, mv, grep, python.
+    Note: grep patterns with spaces require regex (e.g., hello\\s+world).
     """
     fs = ctx.deps.fs
     parts = command.split(" ", 1)
@@ -267,6 +268,71 @@ def run_shell(ctx: RunContext[AgentDeps], command: str) -> str:
         fs.files[dst_path] = content
         del fs.files[src_path]
         return f"Moved {src_path} to {dst_path}"
+
+    if cmd == "grep":
+        import re
+        # Parse flags: -A NUM, -B NUM
+        tokens = arg.split()
+        after_ctx = before_ctx = 0
+        while tokens and tokens[0].startswith("-"):
+            flag = tokens.pop(0)
+            if flag in ("-A", "-B") and tokens:
+                try:
+                    val = int(tokens.pop(0))
+                    if flag == "-A":
+                        after_ctx = val
+                    else:
+                        before_ctx = val
+                except ValueError:
+                    return f"Error: {flag} requires a number"
+            else:
+                return f"Error: Unknown flag {flag}. Usage: grep [-A NUM] [-B NUM] PATTERN [PATH]"
+
+        if not tokens:
+            return "Usage: grep [-A NUM] [-B NUM] PATTERN [PATH]"
+        pattern = tokens[0]
+        target = fs._resolve(tokens[1] if len(tokens) > 1 else ".")
+
+        try:
+            regex = re.compile(pattern)
+        except re.error as e:
+            return f"Error: Invalid regex pattern: {e}"
+
+        results = []
+        for filepath, content in fs.files.items():
+            if filepath.endswith("/.dir"):
+                continue
+            if not filepath.startswith(target):
+                continue
+            if target in fs.files and filepath != target:
+                continue
+
+            lines = content.split("\n")
+            matched_ranges = set()
+
+            # Find all matching line indices and their context ranges
+            for i, line in enumerate(lines):
+                if regex.search(line):
+                    start = max(0, i - before_ctx)
+                    end = min(len(lines), i + after_ctx + 1)
+                    for j in range(start, end):
+                        matched_ranges.add((j, j == i))
+
+            # Output lines in order, marking matches
+            prev_idx = -2
+            for idx in sorted(set(j for j, _ in matched_ranges)):
+                is_match = any(m for j, m in matched_ranges if j == idx)
+                if idx > prev_idx + 1 and prev_idx >= 0:
+                    results.append("--")
+                marker = ":" if is_match else "-"
+                results.append(f"{filepath}:{idx + 1}{marker}{lines[idx]}")
+                prev_idx = idx
+
+        if not results:
+            return "No matches found."
+        if len(results) > 100:
+            return f"Found {len(results)} lines (showing first 100):\n" + "\n".join(results[:100])
+        return "\n".join(results)
 
     if cmd == "python":
         workspace = ctx.deps.workspace_path

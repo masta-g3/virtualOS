@@ -22,7 +22,7 @@ export function createFileTools(fs: VirtualFileSystem) {
 
   const runShell = tool({
     description:
-      "Execute a shell command. Supported: ls, rm, pwd, cd, grep <pattern> [path].",
+      "Execute a shell command. Supported: ls, rm, pwd, cd, grep [-A NUM] [-B NUM] <pattern> [path].",
     inputSchema: z.object({
       command: z.string().describe("Shell command to execute"),
     }),
@@ -41,11 +41,27 @@ export function createFileTools(fs: VirtualFileSystem) {
         case "rm":
           return fs.delete(arg);
         case "grep": {
-          const args = arg.split(" ");
-          if (args.length === 0 || !args[0]) {
-            return "Error: grep requires a pattern. Usage: grep <pattern> [path]";
+          // Parse: grep [-A NUM] [-B NUM] PATTERN [PATH]
+          const tokens = arg.split(" ");
+          let before = 0,
+            after = 0;
+
+          while (tokens.length && tokens[0].startsWith("-")) {
+            const flag = tokens.shift()!;
+            if ((flag === "-A" || flag === "-B") && tokens.length) {
+              const val = parseInt(tokens.shift()!, 10);
+              if (isNaN(val)) return `Error: ${flag} requires a number`;
+              if (flag === "-A") after = val;
+              else before = val;
+            } else {
+              return `Error: Unknown flag ${flag}. Usage: grep [-A NUM] [-B NUM] PATTERN [PATH]`;
+            }
           }
-          return fs.grep(args[0], args[1]);
+
+          if (!tokens.length) {
+            return "Usage: grep [-A NUM] [-B NUM] PATTERN [PATH]";
+          }
+          return fs.grep(tokens[0], tokens[1], before, after);
         }
         default:
           return `Error: Command '${cmd}' not implemented in virtual sandbox.`;
