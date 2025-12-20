@@ -1,5 +1,5 @@
 import { config } from "dotenv";
-import { runAgent } from "./agent.js";
+import { runAgent, runAgentStreaming } from "./agent.js";
 import { MODEL_KEYS, ModelKey, ThinkingEffort } from "./models.js";
 import { VirtualFileSystem } from "./virtual-fs.js";
 
@@ -55,19 +55,13 @@ async function main() {
   const fs = new VirtualFileSystem();
   fs.loadFromDisk("./workspace");
 
-  const result = await runAgent(prompt, { modelKey, thinkingEffort, fs });
+  const shouldStream = process.stdout.isTTY ?? false;
 
-  // Show reasoning summary if present
-  if (result.reasoning) {
-    const preview = result.reasoning.slice(0, 200).replace(/\n/g, " ");
-    console.log(`[reasoning] ${preview}${result.reasoning.length > 200 ? "..." : ""}\n`);
-  }
-
-  console.log(result.text);
-
-  const fileCount = Object.keys(result.files).length;
-  if (fileCount > 0 || result.toolCalls.length > 0) {
-    console.log(`\n[${result.steps} steps, ${result.toolCalls.length} tool calls, ${fileCount} files]`);
+  if (shouldStream) {
+    await runAgentStreaming(prompt, { modelKey, thinkingEffort, fs });
+  } else {
+    const result = await runAgent(prompt, { modelKey, thinkingEffort, fs });
+    console.log(result.text);
   }
 }
 

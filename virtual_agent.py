@@ -1,4 +1,5 @@
 import asyncio
+import json
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -9,7 +10,8 @@ from typing import Literal
 import requests
 from dotenv import load_dotenv
 
-from pydantic_ai import Agent, RunContext, UsageLimits
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.messages import FunctionToolCallEvent, FunctionToolResultEvent, PartDeltaEvent, ThinkingPartDelta
 from pydantic_ai.models.anthropic import AnthropicModelSettings
 from pydantic_ai.models.google import GoogleModelSettings
 from pydantic_ai.models.openai import OpenAIResponsesModelSettings
@@ -187,7 +189,7 @@ low summary → medium → high → full paper
 ## Scratchpad
 
 Maintain /home/user/scratchpad.md to accumulate findings:
-- read_file to get current state
+- Create with write_file on first use (don't read if it doesn't exist yet)
 - Append new findings
 - write_file to save updates
 """
@@ -479,6 +481,51 @@ def create_agent(
 agent = create_agent()
 
 
+def _format_args(args: dict | str, max_len: int = 60) -> str:
+    if isinstance(args, str):
+        args = json.loads(args)
+    result = ", ".join(f"{k}={v!r}" for k, v in args.items())
+    return result[:max_len] + "..." if len(result) > max_len else result
+
+
+def _truncate(text: str, max_len: int) -> str:
+    text = text.replace("\n", " ").strip()
+    return text[:max_len] + "..." if len(text) > max_len else text
+
+
+async def run_streaming(prompt: str, deps: AgentDeps) -> None:
+    """Run agent with streaming output to terminal."""
+    tool_calls = 0
+    steps = 0
+
+    async for event in agent.run_stream_events(prompt, deps=deps):
+        if isinstance(event, PartDeltaEvent):
+            if isinstance(event.delta, ThinkingPartDelta) and event.delta.content_delta:
+                sys.stdout.write(f"\033[90m{event.delta.content_delta}\033[0m")
+                sys.stdout.flush()
+        elif isinstance(event, FunctionToolCallEvent):
+            tool_calls += 1
+            steps += 1
+            name = event.part.tool_name
+            args = _format_args(event.part.args)
+            print(f"\n\033[90m[tool]\033[0m {name}({args})")
+        elif isinstance(event, FunctionToolResultEvent):
+            result = _truncate(str(event.result.content), 200)
+            print(f"\033[90m[result]\033[0m {result}")
+        elif hasattr(event, 'result'):
+            # Final result
+            steps += 1
+            print(f"\n{event.result.output}")
+            if tool_calls > 0:
+                print(f"\n[{steps} steps, {tool_calls} tool calls]")
+
+
+async def run_blocking(prompt: str, deps: AgentDeps) -> None:
+    """Run agent without streaming (for piped output)."""
+    result = await agent.run(prompt, deps=deps)
+    print(result.output)
+
+
 async def main():
     if len(sys.argv) < 2:
         print("Usage: python virtual_agent.py <prompt>")
@@ -491,8 +538,10 @@ async def main():
     fs.load_from_disk(workspace)
     deps = AgentDeps(fs=fs, user_name="user", workspace_path=workspace)
 
-    result = await agent.run(prompt, deps=deps)
-    print(result.output)
+    if sys.stdout.isatty():
+        await run_streaming(prompt, deps)
+    else:
+        await run_blocking(prompt, deps)
 
 
 if __name__ == "__main__":

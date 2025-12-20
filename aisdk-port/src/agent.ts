@@ -1,4 +1,4 @@
-import { generateText, stepCountIs } from "ai";
+import { generateText, streamText, stepCountIs } from "ai";
 import { VirtualFileSystem } from "./virtual-fs.js";
 import { createFileTools } from "./tools/file-tools.js";
 import { createResearchTools } from "./tools/research-tools.js";
@@ -44,7 +44,7 @@ low summary → medium → high → full paper
 ## Scratchpad
 
 Maintain /home/user/scratchpad.md to accumulate findings:
-- read_file to get current state
+- Create with write_file on first use (don't read if it doesn't exist yet)
 - Append new findings
 - write_file to save updates
 `;
@@ -121,4 +121,81 @@ export async function runAgent(
     toolCalls,
     reasoning,
   };
+}
+
+function formatArgs(args: Record<string, unknown> | undefined, maxLen = 60): string {
+  if (!args) return "";
+  const result = Object.entries(args).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(", ");
+  return result.length > maxLen ? result.slice(0, maxLen) + "..." : result;
+}
+
+function truncate(text: string, maxLen: number): string {
+  const clean = text.replace(/\n/g, " ").trim();
+  return clean.length > maxLen ? clean.slice(0, maxLen) + "..." : clean;
+}
+
+export async function runAgentStreaming(
+  prompt: string,
+  options: AgentOptions = {}
+): Promise<void> {
+  const { modelKey = "openai", thinkingEffort = "high", fs: providedFs } = options;
+  const { model, providerOptions, maxTokens } = createModel(modelKey, thinkingEffort);
+
+  const fs = providedFs ?? new VirtualFileSystem();
+  const { writeFile, readFile, runShell } = createFileTools(fs);
+  const { searchArxiv, getPaperSummaries, fetchPaper } = createResearchTools(fs);
+
+  const result = streamText({
+    model,
+    system: SYSTEM_PROMPT,
+    prompt,
+    tools: { writeFile, readFile, runShell, searchArxiv, getPaperSummaries, fetchPaper },
+    stopWhen: stepCountIs(10),
+    ...(providerOptions && { providerOptions }),
+    ...(maxTokens && { maxTokens }),
+  });
+
+  let toolCalls = 0;
+  let steps = 0;
+  let textStreamed = false;
+
+  for await (const part of result.fullStream) {
+    switch (part.type) {
+      case "reasoning":
+        if (part.textDelta) process.stdout.write(`\x1b[90m${part.textDelta}\x1b[0m`);
+        break;
+      case "tool-call":
+        toolCalls++;
+        steps++;
+        // @ts-expect-error - AI SDK uses 'input' but types may vary
+        const args = part.input ?? part.args;
+        console.log(`\n\x1b[90m[tool]\x1b[0m ${part.toolName}(${formatArgs(args)})`);
+        break;
+      case "tool-result":
+        // @ts-expect-error - AI SDK uses 'output' but types may vary
+        console.log(`\x1b[90m[result]\x1b[0m ${truncate(String(part.output ?? part.result), 200)}`);
+        break;
+      case "text-delta":
+        if (part.textDelta) {
+          process.stdout.write(part.textDelta);
+          textStreamed = true;
+        }
+        break;
+      case "finish":
+        steps++;
+        break;
+    }
+  }
+
+  // Print final text (some models don't emit text-delta events)
+  const finalText = await result.text;
+  if (textStreamed) {
+    console.log(); // newline after streamed text
+  } else if (finalText) {
+    console.log(finalText);
+  }
+
+  if (toolCalls > 0) {
+    console.log(`\n[${steps} steps, ${toolCalls} tool calls]`);
+  }
 }
