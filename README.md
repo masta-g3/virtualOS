@@ -1,4 +1,4 @@
-# pyagents
+# Virtual OS
 
 Minimal agent harness for testing LLM agentic capabilities with custom tools.
 

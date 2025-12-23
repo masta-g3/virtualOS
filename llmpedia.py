@@ -5,7 +5,7 @@ Example of how to create a plugin that connects to an external database/knowledg
 Tools defined here are auto-loaded by virtual_agent.py.
 
 Environment variables:
-    LLMPEDIA_DB_URL: PostgreSQL connection string
+    DB_NAME, DB_USER, DB_PASS, DB_HOST, DB_PORT: PostgreSQL connection
     GOOGLE_API_KEY: For Gemini embeddings (semantic search)
 """
 
@@ -20,7 +20,13 @@ from google import genai
 
 load_dotenv()
 
-DB_URL = os.getenv("LLMPEDIA_DB_URL")
+DB_CONFIG = {
+    "dbname": os.getenv("DB_NAME"),
+    "user": os.getenv("DB_USER"),
+    "password": os.getenv("DB_PASS"),
+    "host": os.getenv("DB_HOST"),
+    "port": os.getenv("DB_PORT", "5432"),
+}
 EMBEDDING_MODEL = "gemini-embedding-001"
 S3_BASE = "https://arxiv-md.s3.amazonaws.com"
 
@@ -32,7 +38,7 @@ RESOLUTION_TOKENS = {
 
 
 def _get_connection():
-    return psycopg2.connect(DB_URL)
+    return psycopg2.connect(**DB_CONFIG)
 
 
 def _get_embedding(text: str) -> list[float]:

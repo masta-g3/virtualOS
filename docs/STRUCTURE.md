@@ -1,6 +1,6 @@
-# Project Structure
+# Virtual OS
 
-PydanticAI agent experiments - sandboxed AI agents with tool use.
+Minimal agent harness for testing LLM agentic capabilities with custom tools.
 
 ## Philosophy
 
