@@ -15,32 +15,21 @@ PydanticAI agent experiments - sandboxed AI agents with tool use.
 ## Architecture
 
 ```
-pydantic-agents/
-├── virtual_agent.py    # Agent library (VirtualFileSystem, create_agent, MODELS)
-├── tui.py              # Textual TUI (imports from virtual_agent)
-├── commands.py         # Slash command registry and handlers
-├── theme.py            # Theme loader (load, list, generate CSS)
+pyagents/
+├── virtual_agent.py    # Agent core (VirtualFileSystem, create_agent, built-in tools)
+├── custom_tools.py     # User-defined tools (auto-loaded)
+├── llmpedia.py         # Example plugin: arXiv paper search (auto-loaded)
+├── tui.py              # Textual TUI for interactive chat
+├── commands.py         # Slash command registry
+├── theme.py            # Theme loader
 ├── settings.py         # User settings persistence
 ├── themes/             # Built-in themes (YAML)
-│   ├── amber-dark.yaml
-│   ├── catppuccin-macchiato.yaml
-│   ├── gruvbox-dark.yaml
-│   └── solarized-light.yaml
-├── research_tools.py   # LLMpedia DB queries (search, summaries, download)
 ├── workspace/          # Synced with VirtualFileSystem (ctrl+s to save)
-│   └── papers/         # Downloaded arXiv paper markdowns
 ├── tests/              # pytest test suite
-│   ├── conftest.py        # Shared fixtures
-│   ├── test_virtual_fs.py # VirtualFileSystem tests
-│   ├── test_tools.py      # Agent tool tests
-│   └── test_commands.py   # Slash command tests
 ├── pyproject.toml      # Dependencies (uv)
 ├── .env                # API keys (not committed)
 └── docs/
-    ├── STRUCTURE.md       # This file
-    ├── TESTING.md         # Test suite documentation
-    ├── VISUAL_IDENTITY.md # TUI design system (colors, prefixes, motion)
-    └── history/           # Archived feature specs
+    └── STRUCTURE.md    # Architecture details
 ```
 
 ## Core Concepts
@@ -55,78 +44,61 @@ A PydanticAI agent operating in a sandboxed environment:
 │           (LLM with system prompt + tool access)                │
 └──────────────────────────────┬──────────────────────────────────┘
                                │ calls
-        ┌──────────┬───────────┼───────────┬──────────────┐
-        ▼          ▼           ▼           ▼              ▼
-┌────────────┐ ┌────────┐ ┌──────────┐ ┌────────────┐ ┌───────────┐
-│ write_file │ │read_file│ │run_shell │ │search_arxiv│ │fetch_paper│
-└─────┬──────┘ └───┬────┘ └────┬─────┘ └─────┬──────┘ └─────┬─────┘
-      │            │           │             │              │
-      └────────────┼───────────┘             │              │
-                   ▼                         ▼              ▼
-┌─────────────────────────────────┐  ┌─────────────────────────────┐
-│      VirtualFileSystem          │  │      research_tools.py      │
-│  (in-memory dict, sandboxed)    │  │  (LLMpedia DB + S3)         │
-└─────────────────────────────────┘  └─────────────────────────────┘
+        ┌──────────────────────┼──────────────────────┐
+        ▼                      ▼                      ▼
+┌───────────────────┐  ┌───────────────────┐  ┌───────────────────┐
+│   Core Tools      │  │  llmpedia.py      │  │  custom_tools.py  │
+│ write/read/shell  │  │  (example plugin) │  │  (user tools)     │
+└─────────┬─────────┘  └─────────┬─────────┘  └─────────┬─────────┘
+          │                      │                      │
+          ▼                      ▼                      ▼
+┌───────────────────┐  ┌───────────────────┐  ┌───────────────────┐
+│ VirtualFileSystem │  │ PostgreSQL + S3   │  │ Your backends...  │
+└───────────────────┘  └───────────────────┘  └───────────────────┘
 ```
 
-**File Tools:**
+**Core Tools** (built-in):
 
-| Tool | Purpose | Parameters |
-|------|---------|------------|
-| `write_file` | Create/overwrite files | `path`, `content` |
-| `read_file` | Read file contents | `path` |
-| `run_shell` | Shell commands | `command` (ls, rm, pwd, cd, mkdir, touch, mv, grep, python) |
-
-**Research Tools:**
-
-| Tool | Purpose | Parameters |
-|------|---------|------------|
-| `search_arxiv` | Search papers in LLMpedia | `query`, `title_contains`, `author`, `published_after/before`, `limit` |
-| `get_paper_summaries` | Get summaries at resolution | `arxiv_codes`, `resolution` (low/medium/high) |
-| `fetch_paper` | Download full paper to VFS | `arxiv_code` |
+| Tool | Purpose |
+|------|---------|
+| `write_file` | Create/overwrite files in VFS |
+| `read_file` | Read file contents from VFS |
+| `run_shell` | Shell commands (ls, rm, pwd, cd, mkdir, touch, mv, grep, python) |
 
 **Key components:**
 
-- `VirtualFileSystem` - Dataclass holding `files: dict[str, str]` and `cwd: str`
-- `AgentDeps` - Dependency injection container passed to tools via `RunContext`
-- Structured tools for file ops (no shell parsing issues)
+- `VirtualFileSystem` - In-memory dict, sandboxed (agent can't touch real files)
+- `AgentDeps` - Dependency container passed to tools via `ctx.deps`
 
-**Safety:** All file operations happen in a Python dictionary. The agent cannot access the real filesystem.
+## LLMpedia Plugin (`llmpedia.py`)
 
-### Research Workflow
+Example of connecting to an external database/knowledge base. Shows the pattern for building plugins.
 
-The agent supports two research modes against the LLMpedia arXiv database:
+| Tool | Purpose |
+|------|---------|
+| `search_arxiv` | Semantic + filter search against LLMpedia PostgreSQL |
+| `get_paper_summaries` | Multi-resolution summaries (low/medium/high) |
+| `fetch_paper` | Download full paper markdown from S3 to VFS |
 
-**Narrow/Deep** (1-3 papers): Skip summaries → `fetch_paper` → `read_file`
+To disable: delete or rename `llmpedia.py` (tools auto-load via try/except).
 
-**Broad/Survey** (5+ papers): `search_arxiv` → `get_paper_summaries` (low/medium) → triage → escalate selectively
+## Custom Tools
 
-Escalation path: low summary → medium → high → full paper
+Add tools in `custom_tools.py`:
 
-The agent maintains a scratchpad at `/home/user/scratchpad.md` to accumulate research findings.
-
-## Adding New Agents
-
-1. Create a new Python file (e.g., `my_agent.py`)
-2. Define dependencies dataclass for state
-3. Create `Agent()` with model, deps_type, and system_prompt
-4. Add tools with `@agent.tool` decorator
-5. Run with `asyncio.run()`
-
-Example pattern:
 ```python
-from pydantic_ai import Agent, RunContext
+def my_tool(ctx, query: str) -> str:
+    """Tool description (shown to LLM)."""
+    return f"Result: {query}"
 
-@dataclass
-class MyDeps:
-    state: MyState
-
-agent = Agent("openai:gpt-4.1-mini", deps_type=MyDeps)
-
-@agent.tool
-def my_tool(ctx: RunContext[MyDeps], arg: str) -> str:
-    return ctx.deps.state.do_something(arg)
+TOOLS = [my_tool]
 ```
+
+Access agent state via `ctx.deps`:
+- `ctx.deps.fs` - VirtualFileSystem instance (read, write, list_dir, delete)
+- `ctx.deps.workspace_path` - Host workspace Path
+
+Tools are automatically loaded on agent startup. The docstring becomes the tool description the LLM sees.
 
 ## Running
 
@@ -206,9 +178,9 @@ Managed via `uv`. Key packages:
 - `textual` - TUI framework
 - `pyyaml` - Theme file parsing
 - `python-dotenv` - Load `.env` files
-- `psycopg2-binary` - PostgreSQL client (research_tools)
-- `google-genai` - Gemini embeddings for semantic search
-- `requests` - HTTP client for S3 downloads
+- `psycopg2-binary` - PostgreSQL client (llmpedia plugin)
+- `google-genai` - Gemini embeddings (llmpedia semantic search)
+- `requests` - HTTP client (llmpedia S3 downloads)
 
 Dev dependencies (`uv sync --extra dev`):
 - `pytest` - Test framework

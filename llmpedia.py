@@ -1,5 +1,8 @@
 """
-Research tools for querying LLMpedia PostgreSQL database.
+LLMpedia plugin - arXiv paper search and retrieval.
+
+Example of how to create a plugin that connects to an external database/knowledge base.
+Tools defined here are auto-loaded by virtual_agent.py.
 
 Environment variables:
     LLMPEDIA_DB_URL: PostgreSQL connection string
@@ -17,10 +20,7 @@ from google import genai
 
 load_dotenv()
 
-DB_URL = os.getenv(
-    "LLMPEDIA_DB_URL",
-    "REDACTED_DB_URL"
-)
+DB_URL = os.getenv("LLMPEDIA_DB_URL")
 EMBEDDING_MODEL = "gemini-embedding-001"
 S3_BASE = "https://arxiv-md.s3.amazonaws.com"
 
@@ -235,3 +235,114 @@ def download_papers(
         results = list(executor.map(_download, arxiv_codes))
 
     return dict(results)
+
+
+# ─────────────────────────────────────────────────────────────
+# Agent Tools (registered with the agent)
+# ─────────────────────────────────────────────────────────────
+
+VIRTUAL_ROOT = "/home/user"
+
+
+def search_arxiv(
+    ctx,
+    query: str | None = None,
+    title_contains: str | None = None,
+    abstract_contains: str | None = None,
+    author: str | None = None,
+    published_after: str | None = None,
+    published_before: str | None = None,
+    limit: int = 10
+) -> str:
+    """
+    Search arXiv papers in LLMpedia database.
+
+    Args:
+        query: Semantic search query (finds conceptually similar papers)
+        title_contains: Substring to match in paper titles
+        abstract_contains: Substring to match in abstracts
+        author: Author name to filter by
+        published_after: Filter papers after this date (YYYY-MM-DD)
+        published_before: Filter papers before this date (YYYY-MM-DD)
+        limit: Maximum results (default 10, max 50)
+    """
+    limit = min(limit, 50)
+    results = search_papers(
+        query=query,
+        title_contains=title_contains,
+        abstract_contains=abstract_contains,
+        author=author,
+        published_after=published_after,
+        published_before=published_before,
+        limit=limit
+    )
+
+    if not results:
+        return "No papers found matching criteria."
+
+    lines = [f"Found {len(results)} papers:\n"]
+    for paper in results:
+        lines.append(f"[{paper['arxiv_code']}] {paper['title']} ({paper['published']})")
+        lines.append(f"  Authors: {paper['authors'][:80]}...")
+        if paper.get('similarity'):
+            lines.append(f"  Similarity: {paper['similarity']}")
+        if paper.get('abstract'):
+            lines.append(f"  Abstract: {paper['abstract'][:200]}...")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def get_paper_summaries(
+    ctx,
+    arxiv_codes: list[str],
+    resolution: str = "medium"
+) -> str:
+    """
+    Get summaries for papers at specified detail level.
+
+    Args:
+        arxiv_codes: List of arXiv paper codes (e.g., ["2401.12345"])
+        resolution: Detail level - "low" (~500 tokens), "medium" (~1000), "high" (~2500)
+    """
+    if not arxiv_codes:
+        return "Error: No arxiv codes provided."
+
+    summaries = get_summaries(arxiv_codes, resolution)
+
+    if not summaries:
+        return "No summaries found for the provided arxiv codes."
+
+    lines = []
+    for code, summary in summaries.items():
+        lines.append(f"## {code}\n")
+        lines.append(summary)
+        lines.append("\n---\n")
+
+    return "\n".join(lines)
+
+
+def fetch_paper(ctx, arxiv_code: str) -> str:
+    """
+    Download full paper markdown into the virtual filesystem.
+
+    The paper will be saved to /home/user/papers/{arxiv_code}.md and can be
+    read using the read_file tool.
+
+    Args:
+        arxiv_code: The arXiv paper code (e.g., "2401.12345")
+    """
+    url = f"{S3_BASE}/{arxiv_code}/paper.md"
+    response = requests.get(url, timeout=30)
+
+    if response.status_code != 200:
+        return f"Error: Could not download paper {arxiv_code} (HTTP {response.status_code})"
+
+    content = response.text
+    path = f"{VIRTUAL_ROOT}/papers/{arxiv_code}.md"
+    ctx.deps.fs.write(path, content)
+
+    return f"Downloaded {arxiv_code} to {path} ({len(content):,} chars)"
+
+
+TOOLS = [search_arxiv, get_paper_summaries, fetch_paper]

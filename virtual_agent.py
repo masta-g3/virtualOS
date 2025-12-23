@@ -7,7 +7,6 @@ from pathlib import Path
 
 from typing import Literal
 
-import requests
 from dotenv import load_dotenv
 
 from pydantic_ai import Agent, RunContext
@@ -15,8 +14,6 @@ from pydantic_ai.messages import FunctionToolCallEvent, FunctionToolResultEvent,
 from pydantic_ai.models.anthropic import AnthropicModelSettings
 from pydantic_ai.models.google import GoogleModelSettings
 from pydantic_ai.models.openai import OpenAIResponsesModelSettings
-
-from research_tools import search_papers, get_summaries, S3_BASE
 
 load_dotenv()
 
@@ -360,108 +357,25 @@ def run_shell(ctx: RunContext[AgentDeps], command: str) -> str:
     return f"Error: Command '{cmd}' not implemented in virtual sandbox."
 
 
-def search_arxiv(
-    ctx: RunContext[AgentDeps],
-    query: str | None = None,
-    title_contains: str | None = None,
-    abstract_contains: str | None = None,
-    author: str | None = None,
-    published_after: str | None = None,
-    published_before: str | None = None,
-    limit: int = 10
-) -> str:
-    """
-    Search arXiv papers in LLMpedia database.
+# ─────────────────────────────────────────────────────────────
+# Tool Registration
+# ─────────────────────────────────────────────────────────────
 
-    Args:
-        query: Semantic search query (finds conceptually similar papers)
-        title_contains: Substring to match in paper titles
-        abstract_contains: Substring to match in abstracts
-        author: Author name to filter by
-        published_after: Filter papers after this date (YYYY-MM-DD)
-        published_before: Filter papers before this date (YYYY-MM-DD)
-        limit: Maximum results (default 10, max 50)
-    """
-    limit = min(limit, 50)
-    results = search_papers(
-        query=query,
-        title_contains=title_contains,
-        abstract_contains=abstract_contains,
-        author=author,
-        published_after=published_after,
-        published_before=published_before,
-        limit=limit
-    )
+TOOLS = [write_file, read_file, run_shell]
 
-    if not results:
-        return "No papers found matching criteria."
+# Load LLMpedia plugin (example of external knowledge base integration)
+try:
+    from llmpedia import TOOLS as _LLMPEDIA_TOOLS
+    TOOLS.extend(_LLMPEDIA_TOOLS)
+except ImportError:
+    pass
 
-    lines = [f"Found {len(results)} papers:\n"]
-    for paper in results:
-        lines.append(f"[{paper['arxiv_code']}] {paper['title']} ({paper['published']})")
-        lines.append(f"  Authors: {paper['authors'][:80]}...")
-        if paper.get('similarity'):
-            lines.append(f"  Similarity: {paper['similarity']}")
-        if paper.get('abstract'):
-            lines.append(f"  Abstract: {paper['abstract'][:200]}...")
-        lines.append("")
-
-    return "\n".join(lines)
-
-
-def get_paper_summaries(
-    ctx: RunContext[AgentDeps],
-    arxiv_codes: list[str],
-    resolution: str = "medium"
-) -> str:
-    """
-    Get summaries for papers at specified detail level.
-
-    Args:
-        arxiv_codes: List of arXiv paper codes (e.g., ["2401.12345"])
-        resolution: Detail level - "low" (~500 tokens), "medium" (~1000), "high" (~2500)
-    """
-    if not arxiv_codes:
-        return "Error: No arxiv codes provided."
-
-    summaries = get_summaries(arxiv_codes, resolution)
-
-    if not summaries:
-        return "No summaries found for the provided arxiv codes."
-
-    lines = []
-    for code, summary in summaries.items():
-        lines.append(f"## {code}\n")
-        lines.append(summary)
-        lines.append("\n---\n")
-
-    return "\n".join(lines)
-
-
-def fetch_paper(ctx: RunContext[AgentDeps], arxiv_code: str) -> str:
-    """
-    Download full paper markdown into the virtual filesystem.
-
-    The paper will be saved to /home/user/papers/{arxiv_code}.md and can be
-    read using the read_file tool.
-
-    Args:
-        arxiv_code: The arXiv paper code (e.g., "2401.12345")
-    """
-    url = f"{S3_BASE}/{arxiv_code}/paper.md"
-    response = requests.get(url, timeout=30)
-
-    if response.status_code != 200:
-        return f"Error: Could not download paper {arxiv_code} (HTTP {response.status_code})"
-
-    content = response.text
-    path = f"{VIRTUAL_ROOT}/papers/{arxiv_code}.md"
-    ctx.deps.fs.write(path, content)
-
-    return f"Downloaded {arxiv_code} to {path} ({len(content):,} chars)"
-
-
-TOOLS = [write_file, read_file, run_shell, search_arxiv, get_paper_summaries, fetch_paper]
+# Load custom user tools
+try:
+    from custom_tools import TOOLS as _CUSTOM_TOOLS
+    TOOLS.extend(_CUSTOM_TOOLS)
+except ImportError:
+    pass
 
 
 def create_agent(
