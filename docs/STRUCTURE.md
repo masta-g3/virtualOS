@@ -157,6 +157,8 @@ The TUI loads files from `./workspace/` into the virtual filesystem on startup:
 | Ctrl+L | Clear (new session) |
 | Ctrl+S | Save workspace |
 | Ctrl+Y | Copy mode (select block to copy) |
+| ↑/↓ | Navigate input history |
+| Esc | Rewind mode (edit previous message) |
 
 ## Model Configuration
 

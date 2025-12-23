@@ -192,4 +192,14 @@ SelectorScreen {{
 .copy-target {{
     border: round {c["accent"]};
 }}
+
+.rewind-target {{
+    opacity: 0.6;
+}}
+
+.rewind-selected {{
+    opacity: 1.0;
+    border: tall {c["accent"]};
+    background: {c["bg_surface"]};
+}}
 '''

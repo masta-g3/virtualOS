@@ -61,6 +61,8 @@ async def cmd_help(app: "VirtualAgentApp", args: str) -> str:
         "- `Ctrl+L` — Clear (new session)",
         "- `Ctrl+S` — Save workspace",
         "- `Ctrl+Y` — Copy mode (1-9 to select block)",
+        "- `↑/↓` — Navigate input history",
+        "- `Esc` — Rewind mode (edit previous message)",
     ])
     return "\n".join(lines)
 

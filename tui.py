@@ -192,6 +192,9 @@ class VirtualAgentApp(App):
         Binding("ctrl+l", "clear", "Clear"),
         Binding("ctrl+s", "save", "Save"),
         Binding("ctrl+y", "toggle_copy_mode", "Copy"),
+        Binding("up", "history_prev", "Prev", show=False, priority=True),
+        Binding("down", "history_next", "Next", show=False, priority=True),
+        Binding("escape", "handle_escape", "Esc", show=False, priority=True),
     ]
 
     def __init__(self):
@@ -230,6 +233,16 @@ class VirtualAgentApp(App):
 
         # Multi-line input mode (after Ctrl+E with newlines)
         self.multiline_mode = False
+
+        # Input history (↑/↓ navigation)
+        self.input_history: list[str] = []
+        self.input_history_idx: int = -1  # -1 = composing new, 0+ = viewing history
+        self.input_draft: str = ""
+
+        # Rewind mode state (Esc to edit previous messages)
+        self.rewind_mode: bool = False
+        self.rewind_targets: list[tuple[Static, int, str]] = []  # (widget, history_idx, content)
+        self.rewind_selection: int = 0
 
     def switch_theme(self, name: str) -> str:
         """Switch to a different theme. Returns status message."""
@@ -413,12 +426,15 @@ class VirtualAgentApp(App):
     async def _render_history(self) -> None:
         """Re-render conversation history into the UI."""
         container = self.query_one("#messages", VerticalScroll)
-        for msg in self.history:
+        for idx, msg in enumerate(self.history):
             if isinstance(msg, ModelRequest):
                 for part in msg.parts:
                     if isinstance(part, UserPromptPart):
                         accent = self._theme.colors["accent"]
-                        await container.mount(Static(f"[{accent}]┃[/] {part.content}", classes="user-message"))
+                        widget = Static(f"[{accent}]┃[/] {part.content}", classes="user-message")
+                        widget.history_index = idx
+                        widget.original_content = part.content
+                        await container.mount(widget)
                     elif isinstance(part, ToolReturnPart):
                         await container.mount(format_tool_result(part.content))
             elif isinstance(msg, ModelResponse):
@@ -480,6 +496,12 @@ class VirtualAgentApp(App):
                 messages.scroll_end()
             return
 
+        # Record to input history (avoid duplicates of last entry)
+        if not self.input_history or self.input_history[-1] != prompt:
+            self.input_history.append(prompt)
+        self.input_history_idx = -1
+        self.input_draft = ""
+
         # Disable current input
         if self.multiline_mode:
             self.query_one("#prompt-multi", TextArea).disabled = True
@@ -488,6 +510,8 @@ class VirtualAgentApp(App):
 
         accent = self._theme.colors["accent"]
         user_msg = Static(f"[{accent}]┃[/] {prompt}", classes="user-message")
+        user_msg.history_index = len(self.history)  # Index BEFORE this turn
+        user_msg.original_content = prompt
         await messages.mount(user_msg)
         messages.scroll_end()
 
@@ -683,16 +707,156 @@ class VirtualAgentApp(App):
         self._update_header()
 
     def on_key(self, event: Key) -> None:
-        """Handle keys in copy mode."""
-        if not self.copy_mode:
+        """Handle special keys: copy mode digits, rewind Enter."""
+        # Copy mode digit selection
+        if self.copy_mode:
+            if event.key.isdigit() and event.key != "0":
+                self._copy_block(int(event.key))
+                event.stop()
             return
 
-        if event.key == "escape":
+        # Rewind mode: Enter executes rewind
+        if self.rewind_mode and event.key == "enter":
+            self.call_later(self._execute_rewind)
+            event.stop()
+
+    def action_handle_escape(self) -> None:
+        """Handle Escape key for various modes."""
+        if self.copy_mode:
             self._exit_copy_mode()
-            event.stop()
-        elif event.key.isdigit() and event.key != "0":
-            self._copy_block(int(event.key))
-            event.stop()
+        elif self.rewind_mode:
+            self._exit_rewind_mode()
+        elif not self.multiline_mode and self.history:
+            self._enter_rewind_mode()
+
+    def action_history_prev(self) -> None:
+        """Navigate: older history entry OR older rewind target."""
+        # Rewind mode: navigate to older message
+        if self.rewind_mode:
+            self._rewind_prev()
+            return
+
+        if self.multiline_mode or not self.input_history or self.copy_mode:
+            return
+
+        input_widget = self.query_one("#prompt-single", Input)
+
+        # Save current draft before first navigation
+        if self.input_history_idx == -1:
+            self.input_draft = input_widget.value
+
+        # Move back in history if possible
+        if self.input_history_idx < len(self.input_history) - 1:
+            self.input_history_idx += 1
+            entry = self.input_history[-(self.input_history_idx + 1)]
+            input_widget.value = entry
+            input_widget.cursor_position = len(entry)
+
+    def action_history_next(self) -> None:
+        """Navigate: newer history entry OR newer rewind target."""
+        # Rewind mode: navigate to newer message
+        if self.rewind_mode:
+            self._rewind_next()
+            return
+
+        if self.multiline_mode or not self.input_history or self.copy_mode:
+            return
+
+        input_widget = self.query_one("#prompt-single", Input)
+
+        if self.input_history_idx > 0:
+            self.input_history_idx -= 1
+            entry = self.input_history[-(self.input_history_idx + 1)]
+            input_widget.value = entry
+            input_widget.cursor_position = len(entry)
+        elif self.input_history_idx == 0:
+            self.input_history_idx = -1
+            input_widget.value = self.input_draft
+            input_widget.cursor_position = len(self.input_draft)
+
+    def _enter_rewind_mode(self) -> None:
+        """Activate rewind mode, highlight user messages."""
+        container = self.query_one("#messages", VerticalScroll)
+        candidates = list(container.query(".user-message"))
+
+        # Filter to widgets with history tracking
+        self.rewind_targets = [
+            (w, w.history_index, w.original_content)
+            for w in candidates
+            if hasattr(w, "history_index")
+        ]
+
+        if not self.rewind_targets:
+            self._flash_status("No messages to rewind")
+            return
+
+        self.rewind_mode = True
+        self.rewind_selection = len(self.rewind_targets) - 1  # Start at most recent
+
+        # Disable input
+        self.query_one("#prompt-single", Input).disabled = True
+
+        # Highlight all, mark selected
+        for i, (widget, _, _) in enumerate(self.rewind_targets):
+            widget.add_class("rewind-target")
+            if i == self.rewind_selection:
+                widget.add_class("rewind-selected")
+
+        self._update_status("↑↓ Select  Enter Edit  Esc Cancel")
+
+    def _exit_rewind_mode(self) -> None:
+        """Deactivate rewind mode."""
+        for widget, _, _ in self.rewind_targets:
+            widget.remove_class("rewind-target")
+            widget.remove_class("rewind-selected")
+
+        self.rewind_targets = []
+        self.rewind_mode = False
+        self.rewind_selection = 0
+
+        self.query_one("#prompt-single", Input).disabled = False
+        self.query_one("#prompt-single", Input).focus()
+        self._update_header()
+
+    def _rewind_prev(self) -> None:
+        """Move selection to older message."""
+        if self.rewind_selection > 0:
+            self.rewind_targets[self.rewind_selection][0].remove_class("rewind-selected")
+            self.rewind_selection -= 1
+            self.rewind_targets[self.rewind_selection][0].add_class("rewind-selected")
+            self.rewind_targets[self.rewind_selection][0].scroll_visible()
+
+    def _rewind_next(self) -> None:
+        """Move selection to newer message."""
+        if self.rewind_selection < len(self.rewind_targets) - 1:
+            self.rewind_targets[self.rewind_selection][0].remove_class("rewind-selected")
+            self.rewind_selection += 1
+            self.rewind_targets[self.rewind_selection][0].add_class("rewind-selected")
+            self.rewind_targets[self.rewind_selection][0].scroll_visible()
+
+    async def _execute_rewind(self) -> None:
+        """Load selected message into input and truncate history."""
+        widget, history_idx, content = self.rewind_targets[self.rewind_selection]
+
+        # Truncate history to before this message
+        self.history = self.history[:history_idx]
+
+        # Remove UI widgets from this point forward
+        container = self.query_one("#messages", VerticalScroll)
+        children = list(container.children)
+        widget_idx = children.index(widget)
+        for child in children[widget_idx:]:
+            await child.remove()
+
+        self._exit_rewind_mode()
+
+        # Populate input with message content
+        if "\n" in content:
+            self._switch_to_multiline(content)
+        else:
+            self.query_one("#prompt-single", Input).value = content
+
+        self._flash_status("Rewound")
 
     def _copy_block(self, index: int) -> None:
         """Copy block at 1-based index."""
