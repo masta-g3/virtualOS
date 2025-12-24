@@ -12,11 +12,16 @@ Environment variables:
 import os
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
+from typing import TYPE_CHECKING
 
 import psycopg2
 import requests
 from dotenv import load_dotenv
 from google import genai
+from pydantic_ai import RunContext
+
+if TYPE_CHECKING:
+    from virtual_agent import AgentDeps
 
 load_dotenv()
 
@@ -251,7 +256,7 @@ VIRTUAL_ROOT = "/home/user"
 
 
 def search_arxiv(
-    ctx,
+    ctx: RunContext["AgentDeps"],
     query: str | None = None,
     title_contains: str | None = None,
     abstract_contains: str | None = None,
@@ -300,7 +305,7 @@ def search_arxiv(
 
 
 def get_paper_summaries(
-    ctx,
+    ctx: RunContext["AgentDeps"],
     arxiv_codes: list[str],
     resolution: str = "medium"
 ) -> str:
@@ -328,7 +333,7 @@ def get_paper_summaries(
     return "\n".join(lines)
 
 
-def fetch_paper(ctx, arxiv_code: str) -> str:
+def fetch_paper(ctx: RunContext["AgentDeps"], arxiv_code: str) -> str:
     """
     Download full paper markdown into the virtual filesystem.
 
