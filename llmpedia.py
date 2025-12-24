@@ -12,7 +12,6 @@ Environment variables:
 import os
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
-from typing import TYPE_CHECKING
 
 import psycopg2
 import requests
@@ -20,8 +19,7 @@ from dotenv import load_dotenv
 from google import genai
 from pydantic_ai import RunContext
 
-if TYPE_CHECKING:
-    from virtual_agent import AgentDeps
+from virtual_agent import AgentDeps
 
 load_dotenv()
 
